@@ -1,11 +1,8 @@
-import json
-import logging
+from logger import get_logger
 import os
-from kafka import KafkaConsumer
+from consumers import NotificationConsumer
 
-logging.basicConfig(format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-logger = logging.getLogger("notification-srv")
-logger.setLevel(logging.INFO)
+logger = get_logger()
 
 BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
 TOPIC = os.getenv("KAFKA_TOPIC")
@@ -22,32 +19,13 @@ def main() -> None:
     logger.info("Kafka bootstrap servers: %s", BOOTSTRAP_SERVERS)
     logger.info("Topic: %s", TOPIC)
 
-    consumer = KafkaConsumer(
-        TOPIC,
+    consumer = NotificationConsumer(
+        topic=TOPIC,
         bootstrap_servers=BOOTSTRAP_SERVERS,
-        group_id=GROUP_ID,
-        auto_offset_reset="earliest",
-        enable_auto_commit=True,
-        value_deserializer=lambda v: v.decode("utf-8"),
-        key_deserializer=lambda k: k.decode("utf-8") if k else None,
+        group_id=GROUP_ID
     )
-
-    for message in consumer:
-        payload = message.value
-
-        try:
-            payload = json.loads(payload)
-        except Exception:
-            pass
-
-        logger.info(
-            "Received message topic=%s partition=%s offset=%s key=%s payload=%s",
-            message.topic,
-            message.partition,
-            message.offset,
-            message.key,
-            payload,
-        )
+    consumer.connect()
+    consumer.consume()
 
 
 if __name__ == "__main__":
