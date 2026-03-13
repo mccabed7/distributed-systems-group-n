@@ -1,2 +1,10 @@
 ### macOS stuff
 .DS_Store
+
+### Python
+__pycache__
+.venv
+
+### Editors
+.idea
+.vscode

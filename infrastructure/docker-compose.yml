@@ -26,3 +26,14 @@ services:
     volumes:
       - ./kafka/init.sh:/init.sh:ro
     entrypoint: ["/bin/bash", "/init.sh"]
+
+  notification-srv:
+    build:
+      context: ../services/notification-srv
+    container_name: notification-srv
+    depends_on:
+      - kafka-init-topics
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: notifications
+      KAFKA_GROUP_ID: notification-srv-consumer-group
