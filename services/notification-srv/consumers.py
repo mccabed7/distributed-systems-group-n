@@ -1,8 +1,10 @@
 import time
 from kafka import KafkaConsumer
 from kafka.errors import NoBrokersAvailable
+from pydantic import ValidationError
+import messages
 from logger import get_logger
-from typing import Optional
+from typing import Optional, AnyStr
 
 logger = get_logger("consumers")
 
@@ -44,10 +46,23 @@ class NotificationConsumer:
     def consume(self) -> None:
         for message in self._consumer:
             logger.info(
-                "Received message topic=%s partition=%s offset=%s key=%s payload=%s",
+                "Received message topic=%s partition=%s offset=%s key=%s",
                 message.topic,
                 message.partition,
                 message.offset,
                 message.key,
-                message.value,
             )
+
+            self.process_message(message.key, message.value)
+
+    def process_message(self, key: str, raw_message: AnyStr) -> None:
+        try:
+            message = messages.parse_message(raw_message)
+        except ValidationError as e:
+            logger.error("Failed to parse message, key=%s, err=%s", key, e)
+            return
+
+        if message.delivery_type == messages.DeliveryType.PUSH.value:
+            logger.info("Message is PUSH notification, key=%s", key)
+        elif message.delivery_type == messages.DeliveryType.EMAIL.value:
+            logger.info("Message is EMAIL notification, key=%s", key)
