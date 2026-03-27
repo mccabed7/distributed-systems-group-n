@@ -34,6 +34,22 @@ services:
       - ./kafka/init.sh:/init.sh:ro
     entrypoint: [ "/bin/bash", "/init.sh" ]
 
+  redis:
+    image: redis:8.6.2
+    container_name: redis
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 1s
+      timeout: 3s
+      retries: 5
+    command: [ "redis-server", "/usr/local/etc/redis/redis.conf" ]
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
   notification-srv:
     build:
       context: ../services/notification-srv
@@ -45,3 +61,6 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC: notifications
       KAFKA_GROUP_ID: notification-srv-consumer-group
+
+volumes:
+  redis-data:
