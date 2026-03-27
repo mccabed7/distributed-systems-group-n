@@ -1,4 +1,5 @@
 from aiokafka import AIOKafkaConsumer
+from redis.asyncio import Redis
 from pydantic import ValidationError
 import messages
 from logger import get_logger
@@ -37,7 +38,7 @@ class NotificationConsumer:
         try:
             async for message in self._consumer:
                 logger.info(
-                    "Received message topic=%s partition=%s offset=%s key=%s",
+                    "Received Kafka message topic=%s partition=%s offset=%s key=%s",
                     message.topic,
                     message.partition,
                     message.offset,
@@ -52,7 +53,7 @@ class NotificationConsumer:
         try:
             message = messages.parse_message(raw_message)
         except ValidationError as e:
-            logger.error("Failed to parse message, key=%s, err=%s", key, e)
+            logger.error("Failed to parse Kafka message, key=%s, err=%s", key, e)
             return
 
         if await self._redis.is_message_completed(message.message_id):
@@ -70,10 +71,35 @@ class NotificationConsumer:
                 return
 
         if message.delivery_type == messages.DeliveryType.PUSH.value:
-            logger.info("Message is PUSH notification, key=%s", key)
+            logger.info("Message is PUSH notification, message_id=%s", message.message_id)
+            await self._redis.fanout_publish_message(message.user_id, raw_message)
         elif message.delivery_type == messages.DeliveryType.EMAIL.value:
             logger.info("Message is EMAIL notification, key=%s", key)
 
         await self._redis.complete_message(message.message_id)
         await self._consumer.commit()
         logger.info("Finished processing message [%s]", message.message_id)
+
+
+class PushNotificationConsumer:
+    def __init__(self, host: str, port: int, pod_id: str):
+        self._subscriber = Redis(host=host, port=port).pubsub()
+        self._pod_id = pod_id
+
+    async def connect(self) -> None:
+        await self._subscriber.subscribe(f"pod:{self._pod_id}")
+
+    async def consume(self) -> None:
+        async for raw_message in self._subscriber.listen():
+            try:
+                message = messages.parse_message(raw_message["data"])
+            except ValidationError as e:
+                logger.error("Failed to parse push notification, err=%s", e)
+                continue
+
+            if message.delivery_type != messages.DeliveryType.PUSH.value:
+                logger.error("Message [%s] has unexpected delivery_type: %s", message.message_id,
+                             message.delivery_type.value)
+                continue
+
+            logger.info("Received Redis message, message_id=%s", message.message_id)
