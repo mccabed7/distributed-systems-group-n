@@ -4,6 +4,7 @@ from logger import get_logger
 import os
 from consumers import NotificationConsumer
 import clients
+from heartbeat import Heartbeat
 
 logger = get_logger()
 
@@ -29,6 +30,9 @@ async def main() -> None:
 
     redis_client = clients.RedisClient(REDIS_HOST, REDIS_PORT, pod_id=HOSTNAME)
     logger.info("Connected to redis @ %s:%d", REDIS_HOST, REDIS_PORT)
+
+    heartbeat = Heartbeat(redis_client)
+    asyncio.create_task(heartbeat.run())
 
     consumer = NotificationConsumer(
         topic=TOPIC,

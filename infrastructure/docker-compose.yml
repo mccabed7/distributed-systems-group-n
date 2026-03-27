@@ -63,6 +63,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC: notifications
       KAFKA_GROUP_ID: notification-srv-consumer-group
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
 
   gateway-srv:
     build:
@@ -73,8 +75,6 @@ services:
     environment:
       USER_SRV_URL: http://user-srv:8000
       BOOKING_SRV_URL: http://booking-srv:8000
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
 
 volumes:
   redis-data:

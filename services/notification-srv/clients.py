@@ -1,12 +1,15 @@
 import redis
 
-
 PROCESSING_TTL = 3_600
+
 
 class RedisClient:
     def __init__(self, host: str, port: int, pod_id: str):
         self._client = redis.asyncio.Redis(host=host, port=port, decode_responses=True)
         self._pod_id = pod_id
+
+    async def heartbeat(self) -> None:
+        await self._client.set(f"pod:{self._pod_id}:alive", "1", ex=30)
 
     async def is_message_completed(self, message_id: str) -> bool:
         state = await self._client.get(f"message:{message_id}:state")
@@ -26,4 +29,3 @@ class RedisClient:
             "completed",
             ex=PROCESSING_TTL,
         )
-
