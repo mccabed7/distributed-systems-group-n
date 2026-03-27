@@ -5,6 +5,7 @@ import os
 from consumers import NotificationConsumer, PushNotificationConsumer
 import clients
 from heartbeat import Heartbeat
+import websocket
 
 logger = get_logger()
 
@@ -32,8 +33,9 @@ async def main() -> None:
     logger.info("Connected to redis @ %s:%d", REDIS_HOST, REDIS_PORT)
 
     heartbeat = Heartbeat(redis_client)
+    ws_pool = websocket.WebSocketConnectionPool(redis_client)
 
-    push_notifications = PushNotificationConsumer(REDIS_HOST, REDIS_PORT, pod_id=HOSTNAME)
+    push_notifications = PushNotificationConsumer(ws_pool, REDIS_HOST, REDIS_PORT, pod_id=HOSTNAME)
     await push_notifications.connect()
 
     consumer = NotificationConsumer(
@@ -49,6 +51,7 @@ async def main() -> None:
         heartbeat.run(),
         push_notifications.consume(),
         consumer.consume(),
+        ws_pool.serve(),
     )
 
 
