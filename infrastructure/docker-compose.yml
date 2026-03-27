@@ -53,7 +53,6 @@ services:
   notification-srv:
     build:
       context: ../services/notification-srv
-    container_name: notification-srv
     depends_on:
       kafka-init-topics:
         condition: service_completed_successfully
@@ -65,6 +64,8 @@ services:
       KAFKA_GROUP_ID: notification-srv-consumer-group
       REDIS_HOST: redis
       REDIS_PORT: 6379
+    deploy:
+      replicas: 3
 
   gateway-srv:
     build:

@@ -38,6 +38,7 @@ async def main() -> None:
         topic=TOPIC,
         bootstrap_servers=BOOTSTRAP_SERVERS,
         group_id=GROUP_ID,
+        pod_id=HOSTNAME,
         redis=redis_client,
     )
     consumer.connect()
