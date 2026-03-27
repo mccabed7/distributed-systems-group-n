@@ -15,6 +15,7 @@ class Message(BaseModel):
     model_config = ConfigDict(extra="forbid")
     delivery_type: DeliveryType
     user_id: str
+    message_id: str
     content: str
 
 
