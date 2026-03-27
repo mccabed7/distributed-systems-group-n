@@ -1,3 +1,5 @@
+import asyncio
+
 from logger import get_logger
 import os
 from consumers import NotificationConsumer
@@ -13,7 +15,7 @@ REDIS_PORT = int(os.getenv("REDIS_PORT"))
 HOSTNAME = os.getenv("HOSTNAME")
 
 
-def main() -> None:
+async def main() -> None:
     if not (BOOTSTRAP_SERVERS and TOPIC and GROUP_ID and REDIS_HOST and REDIS_PORT and HOSTNAME):
         logger.error(
             "Missing configuration, ensure KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPIC, KAFKA_GROUP_ID, "
@@ -35,8 +37,8 @@ def main() -> None:
         redis=redis_client,
     )
     consumer.connect()
-    consumer.consume()
+    await consumer.consume()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

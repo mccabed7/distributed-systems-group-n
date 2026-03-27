@@ -1,4 +1,4 @@
-from kafka import KafkaConsumer
+from aiokafka import AIOKafkaConsumer
 from pydantic import ValidationError
 import messages
 from logger import get_logger
@@ -9,7 +9,7 @@ logger = get_logger("consumers")
 
 
 class NotificationConsumer:
-    _consumer: KafkaConsumer
+    _consumer: AIOKafkaConsumer
 
     def __init__(self, topic: str, bootstrap_servers: str, group_id: str, redis: clients.RedisClient):
         self._topic = topic
@@ -19,7 +19,7 @@ class NotificationConsumer:
 
     def connect(self) -> None:
         logger.info("Attempting to connect to Kafka broker")
-        self._consumer = KafkaConsumer(
+        self._consumer = AIOKafkaConsumer(
             self._topic,
             bootstrap_servers=self._bootstrap_servers,
             group_id=self._group_id,
@@ -30,19 +30,23 @@ class NotificationConsumer:
         )
         logger.info("Connected to Kafka broker")
 
-    def consume(self) -> None:
-        for message in self._consumer:
-            logger.info(
-                "Received message topic=%s partition=%s offset=%s key=%s",
-                message.topic,
-                message.partition,
-                message.offset,
-                message.key,
-            )
+    async def consume(self) -> None:
+        await self._consumer.start()
+        try:
+            async for message in self._consumer:
+                logger.info(
+                    "Received message topic=%s partition=%s offset=%s key=%s",
+                    message.topic,
+                    message.partition,
+                    message.offset,
+                    message.key,
+                )
 
-            self.process_message(message.key, message.value)
+                await self.process_message(message.key, message.value)
+        finally:
+            await self._consumer.stop()
 
-    def process_message(self, key: str, raw_message: AnyStr) -> None:
+    async def process_message(self, key: str, raw_message: AnyStr) -> None:
         try:
             message = messages.parse_message(raw_message)
         except ValidationError as e:
@@ -51,7 +55,7 @@ class NotificationConsumer:
 
         if self._redis.is_message_completed(message.message_id):
             logger.info("Message [%s] is already completed", message.message_id)
-            self._consumer.commit()
+            await self._consumer.commit()
             return
 
         if not self._redis.claim_message(message.message_id):
@@ -60,7 +64,7 @@ class NotificationConsumer:
             # better than failing to deliver entirely, so we continue to process here.
             if self._redis.is_message_completed(message.message_id):
                 logger.info("Message [%s] is already completed", message.message_id)
-                self._consumer.commit()
+                await self._consumer.commit()
                 return
 
         if message.delivery_type == messages.DeliveryType.PUSH.value:
@@ -69,5 +73,5 @@ class NotificationConsumer:
             logger.info("Message is EMAIL notification, key=%s", key)
 
         self._redis.complete_message(message.message_id)
-        self._consumer.commit()
+        await self._consumer.commit()
         logger.info("Finished processing message [%s]", message.message_id)
