@@ -53,16 +53,16 @@ class NotificationConsumer:
             logger.error("Failed to parse message, key=%s, err=%s", key, e)
             return
 
-        if self._redis.is_message_completed(message.message_id):
+        if await self._redis.is_message_completed(message.message_id):
             logger.info("Message [%s] is already completed", message.message_id)
             await self._consumer.commit()
             return
 
-        if not self._redis.claim_message(message.message_id):
+        if not await self._redis.claim_message(message.message_id):
             logger.info("Message [%s] could not be claimed", message.message_id)
             # Another consumer may have crashed after accepting the message. In this case, duplicate messages are
             # better than failing to deliver entirely, so we continue to process here.
-            if self._redis.is_message_completed(message.message_id):
+            if await self._redis.is_message_completed(message.message_id):
                 logger.info("Message [%s] is already completed", message.message_id)
                 await self._consumer.commit()
                 return
@@ -72,6 +72,6 @@ class NotificationConsumer:
         elif message.delivery_type == messages.DeliveryType.EMAIL.value:
             logger.info("Message is EMAIL notification, key=%s", key)
 
-        self._redis.complete_message(message.message_id)
+        await self._redis.complete_message(message.message_id)
         await self._consumer.commit()
         logger.info("Finished processing message [%s]", message.message_id)
