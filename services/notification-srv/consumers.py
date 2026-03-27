@@ -11,10 +11,11 @@ logger = get_logger("consumers")
 class NotificationConsumer:
     _consumer: AIOKafkaConsumer
 
-    def __init__(self, topic: str, bootstrap_servers: str, group_id: str, redis: clients.RedisClient):
+    def __init__(self, topic: str, bootstrap_servers: str, group_id: str, pod_id: str, redis: clients.RedisClient):
         self._topic = topic
         self._bootstrap_servers = bootstrap_servers
         self._group_id = group_id
+        self._pod_id = pod_id
         self._redis = redis
 
     def connect(self) -> None:
@@ -22,6 +23,7 @@ class NotificationConsumer:
         self._consumer = AIOKafkaConsumer(
             self._topic,
             bootstrap_servers=self._bootstrap_servers,
+            client_id=self._pod_id,
             group_id=self._group_id,
             auto_offset_reset="earliest",
             enable_auto_commit=False,
