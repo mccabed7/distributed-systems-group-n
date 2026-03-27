@@ -29,3 +29,15 @@ class RedisClient:
             "completed",
             ex=PROCESSING_TTL,
         )
+
+    async def fanout_publish_message(self, user_id: str, content: str) -> None:
+        pods = await self._client.smembers(f"user:{user_id}:pods")
+        alive = []
+        for pod in pods:
+            if await self._client.exists(f"pod:{pod}:alive"):
+                alive.append(pod)
+            else:
+                await self._client.srem(f"user:{user_id}:pods", pod)
+
+        for pod in alive:
+            await self._client.publish(f"pod:{pod}", content)
