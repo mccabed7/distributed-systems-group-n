@@ -11,6 +11,12 @@ class RedisClient:
     async def heartbeat(self) -> None:
         await self._client.set(f"pod:{self._pod_id}:alive", "1", ex=30)
 
+    async def register_user(self, user_id: str) -> None:
+        await self._client.sadd(f"user:{user_id}:pods", self._pod_id)
+
+    async def deregister_user(self, user_id: str) -> None:
+        await self._client.srem(f"user:{user_id}:pods", self._pod_id)
+
     async def is_message_completed(self, message_id: str) -> bool:
         state = await self._client.get(f"message:{message_id}:state")
         return state == "completed"

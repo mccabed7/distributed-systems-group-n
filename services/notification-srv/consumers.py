@@ -5,6 +5,7 @@ import messages
 from logger import get_logger
 from typing import AnyStr
 import clients
+from websocket import WebSocketConnectionPool
 
 logger = get_logger("consumers")
 
@@ -82,7 +83,8 @@ class NotificationConsumer:
 
 
 class PushNotificationConsumer:
-    def __init__(self, host: str, port: int, pod_id: str):
+    def __init__(self, ws_pool: WebSocketConnectionPool, host: str, port: int, pod_id: str):
+        self._ws_pool = ws_pool
         self._subscriber = Redis(host=host, port=port).pubsub()
         self._pod_id = pod_id
 
@@ -103,3 +105,5 @@ class PushNotificationConsumer:
                 continue
 
             logger.info("Received Redis message, message_id=%s", message.message_id)
+            send_message = f'{{"message_id":"{message.message_id}","content":"{message.content}"}}'
+            await self._ws_pool.send(message.user_id, send_message)
