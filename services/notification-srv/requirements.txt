@@ -1,1 +1,5 @@
+email-validator==2.3.0
 kafka-python==2.3.0
+pydantic==2.12.5
+pydantic_core==2.41.5
+redis==7.4.0

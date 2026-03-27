@@ -5,6 +5,12 @@ services:
     container_name: kafka
     ports:
       - "9092:9092"
+    healthcheck:
+      test: [ "CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -20,19 +26,39 @@ services:
   kafka-init-topics:
     image: apache/kafka:3.9.2
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     environment:
       KAFKA_BOOTSTRAP_SERVER: kafka:9092
     volumes:
       - ./kafka/init.sh:/init.sh:ro
-    entrypoint: ["/bin/bash", "/init.sh"]
+    entrypoint: [ "/bin/bash", "/init.sh" ]
+
+  redis:
+    image: redis:8.6.2
+    container_name: redis
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 1s
+      timeout: 3s
+      retries: 5
+    command: [ "redis-server", "/usr/local/etc/redis/redis.conf" ]
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
 
   notification-srv:
     build:
       context: ../services/notification-srv
     container_name: notification-srv
     depends_on:
-      - kafka-init-topics
+      kafka-init-topics:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC: notifications
@@ -47,3 +73,8 @@ services:
     environment:
       USER_SRV_URL: http://user-srv:8000
       BOOKING_SRV_URL: http://booking-srv:8000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+volumes:
+  redis-data:
