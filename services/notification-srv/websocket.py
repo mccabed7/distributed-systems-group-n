@@ -4,7 +4,6 @@ from typing import Set, Dict
 
 import websockets
 from logger import get_logger
-from websockets.exceptions import ConnectionClosed
 
 import clients
 
@@ -74,7 +73,11 @@ class WebSocketConnectionPool:
         try:
             while True:
                 await ws.recv()
-        except ConnectionClosed as e:
+        except websockets.ConnectionClosedOK:
+            # This exception weirdly means that the connection closed properly. Since WebSockets are ephemeral, we
+            # expect them to close, so we are fine to ignore it.
+            pass
+        except websockets.ConnectionClosedError as e:
             logger.error("WebSocket connection closed, user_id=%s, err=%s", user_id, e)
         finally:
             async with self._connections_lock:
