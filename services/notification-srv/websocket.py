@@ -56,8 +56,7 @@ class WebSocketConnectionPool:
         await websockets.serve(self._handler, "0.0.0.0", 8080)
 
     async def _handler(self, ws: websockets.ServerConnection) -> None:
-        user_id = "123"  # TODO: actually get user_id somehow!
-
+        user_id = ws.request.headers.get("X-User-ID")
         if not user_id:
             await ws.close()
             return

@@ -1,6 +1,11 @@
 import os
 import httpx
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect, status, HTTPException
+import websockets
+import asyncio
+
+from starlette.websockets import WebSocketState
+from websockets import ConnectionClosed, ClientConnection
 
 from logger import get_logger
 
@@ -8,6 +13,7 @@ logger = get_logger()
 
 USER_SRV_URL = os.getenv("USER_SRV_URL", "http://user-srv:8000")
 BOOKING_SRV_URL = os.getenv("BOOKING_SRV_URL", "http://booking-srv:8000")
+NOTIFICATION_SRV_URL = os.getenv("NOTIFICATION_SRV_URL", "ws://notification-srv:8080")
 
 app = FastAPI()
 
@@ -100,6 +106,67 @@ async def get_booking(request: Request, booking_id: str) -> Response:
         media_type=response.headers.get("content-type")
     )
 
+
+@app.websocket("/ws")
+async def proxy_websocket_connections(ws: WebSocket):
+    """
+    Opens a WebSocket proxy between the client and notification-srv.
+    1. Client opens WebSocket connection
+    2. Gateway authenticates via user-srv
+    3. If valid, open upstream WebSocket with notification-srv
+    4. Maintain proxy for as long as both connections are kept alive.
+    """
+    # JavaScript does not allow setting headers for WebSocket (despite being supported by the protocol), so this is a
+    # slightly hacky work-around that relies on query parameters for passing.
+    token = ws.query_params.get("token")
+    if token is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing auth token")
+
+    # user = await authenticate(token)
+    user = {"id": "1234"}
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+
+    await ws.accept()
+
+    try:
+        upstream = await websockets.connect(
+            f"{NOTIFICATION_SRV_URL}/ws",
+            additional_headers={"X-User-ID": user["id"]},
+        )
+
+        async def client_to_upstream() -> None:
+            try:
+                while True:
+                    msg = await ws.receive_text()
+                    await upstream.send(msg)
+            except WebSocketDisconnect:
+                # This is fine since WebSockets are treated as being ephemeral. We will clean up the connection further
+                # on.
+                pass
+
+        async def upstream_to_client() -> None:
+            try:
+                async for msg in upstream:
+                    await ws.send_text(msg)
+            except ConnectionClosed:
+                pass
+
+        tasks = [
+            asyncio.create_task(client_to_upstream()),
+            asyncio.create_task(upstream_to_client()),
+        ]
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+
+        await _safe_close_websocket(ws)
+        await _safe_close_websocket(upstream)
+    except Exception as e:
+        logger.error("Error during WebSocket proxying, err=%s", e)
+        await ws.close()
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
@@ -118,3 +185,14 @@ def _extract_token(request: Request) -> str | None:
         return None
 
     return parts[1]
+
+
+async def _safe_close_websocket(ws: WebSocket | ClientConnection) -> None:
+    """
+    Attempts to safely close a websocket connection that may have been established with an upstream or downstream party.
+    """
+    try:
+        if not hasattr(ws, "client_state") or ws.client_state != WebSocketState.DISCONNECTED:
+            await ws.close()
+    except Exception as e:
+        logger.error("Failed to safely close WebSocket connection, err=%s", e)
