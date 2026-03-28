@@ -76,6 +76,7 @@ services:
     environment:
       USER_SRV_URL: http://user-srv:8000
       BOOKING_SRV_URL: http://booking-srv:8000
+      NOTIFICATION_SRV_URL: ws://notification-srv:8080
 
 volumes:
   redis-data:
