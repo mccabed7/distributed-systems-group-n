@@ -315,8 +315,7 @@ async def proxy_websocket_connections(ws: WebSocket):
     if token is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing auth token")
 
-    # user = await authenticate(token)
-    user = {"id": "1234"}
+    user = await authenticate(token)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
