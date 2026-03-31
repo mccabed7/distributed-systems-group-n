@@ -1,0 +1,7 @@
+redis==7.4.0
+pydantic==2.12.5
+pydantic_core==2.41.5
+fastapi==0.115.12
+uvicorn==0.34.2
+httpx==0.28.1
+websockets==16.0
