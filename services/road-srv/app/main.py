@@ -1,7 +1,7 @@
 import os
 from contextlib import asynccontextmanager
 from datetime import date
-from typing import Dict, List
+from typing import Dict, List, Literal, Union
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -12,6 +12,8 @@ from redis.exceptions import RedisError
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 REDIS_DB = int(os.getenv("REDIS_DB", "1"))
+
+MAX_CAPACITY_PER_ROAD = 10
 
 redis_client: Redis | None = None
 
@@ -57,6 +59,21 @@ class CountsResponse(BaseModel):
     counts: Dict[int, int]
 
 
+class IncrementSuccessResponse(BaseModel):
+    status: Literal["success"]
+    country_code: str
+    booking_date: date
+    counts: Dict[int, int]
+
+
+class IncrementFailureResponse(BaseModel):
+    status: Literal["failed"]
+    country_code: str
+    booking_date: date
+    full_roads: List[int]
+    counts: Dict[int, int]
+
+
 class HealthResponse(BaseModel):
     status: str
 
@@ -71,6 +88,37 @@ for i = 1, #ARGV do
     end
 end
 return 1
+"""
+
+
+INCREMENT_TRANSACTIONAL_LUA = """
+local key = KEYS[1]
+local max_capacity = tonumber(ARGV[1])
+
+local full_roads = {}
+
+for i = 2, #ARGV do
+    local field = ARGV[i]
+    local current = tonumber(redis.call('HGET', key, field) or '0')
+    if current >= max_capacity then
+        table.insert(full_roads, field)
+    end
+end
+
+if #full_roads > 0 then
+    local result = {'failed'}
+    for i = 1, #full_roads do
+        table.insert(result, full_roads[i])
+    end
+    return result
+end
+
+for i = 2, #ARGV do
+    local field = ARGV[i]
+    redis.call('HINCRBY', key, field, 1)
+end
+
+return {'success'}
 """
 
 
@@ -94,7 +142,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="road-service",
-    version="1.0.0",
+    version="1.1.0",
     description="Service for incrementing, decrementing, and reading road booking counts per country and date.",
     lifespan=lifespan,
 )
@@ -109,16 +157,24 @@ def health() -> HealthResponse:
         raise HTTPException(status_code=503, detail=f"Redis unavailable: {exc}") from exc
 
 
-@app.post("/roads/increment", response_model=CountsResponse)
-def increment_counts(request: RoadRequest) -> CountsResponse:
+@app.post(
+    "/roads/increment",
+    response_model=Union[IncrementSuccessResponse, IncrementFailureResponse],
+)
+def increment_counts(
+    request: RoadRequest,
+) -> Union[IncrementSuccessResponse, IncrementFailureResponse]:
     key = redis_key(request.country_code, request.booking_date)
     client = get_redis()
 
     try:
-        pipe = client.pipeline()
-        for road_id in request.road_ids:
-            pipe.hincrby(key, str(road_id), 1)
-        pipe.execute()
+        result = client.eval(
+            INCREMENT_TRANSACTIONAL_LUA,
+            1,
+            key,
+            str(MAX_CAPACITY_PER_ROAD),
+            *[str(road_id) for road_id in request.road_ids],
+        )
 
         values = client.hmget(key, [str(road_id) for road_id in request.road_ids])
     except RedisError as exc:
@@ -129,7 +185,21 @@ def increment_counts(request: RoadRequest) -> CountsResponse:
         for road_id, value in zip(request.road_ids, values)
     }
 
-    return CountsResponse(
+    if not result or result[0] not in ("success", "failed"):
+        raise HTTPException(status_code=500, detail="Unexpected Redis response")
+
+    if result[0] == "failed":
+        full_roads = [int(road_id) for road_id in result[1:]]
+        return IncrementFailureResponse(
+            status="failed",
+            country_code=request.country_code,
+            booking_date=request.booking_date,
+            full_roads=full_roads,
+            counts=counts,
+        )
+
+    return IncrementSuccessResponse(
+        status="success",
         country_code=request.country_code,
         booking_date=request.booking_date,
         counts=counts,
