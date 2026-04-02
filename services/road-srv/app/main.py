@@ -18,8 +18,12 @@ MAX_CAPACITY_PER_ROAD = 10
 redis_client: Redis | None = None
 
 
-def redis_key(country_code: str, booking_date: date) -> str:
-    return f"road_counts:{country_code.upper()}:{booking_date.isoformat()}"
+def redis_key(booking_date: date) -> str:
+    return f"road_counts:{booking_date.isoformat()}"
+
+
+def road_field(country_code: str, road_id: int) -> str:
+    return f"{country_code.upper()}:{road_id}"
 
 
 def get_redis() -> Redis:
@@ -29,10 +33,9 @@ def get_redis() -> Redis:
     return redis_client
 
 
-class RoadRequest(BaseModel):
-    country_code: str = Field(..., min_length=2, max_length=3, description="ISO-like country code")
-    booking_date: date
-    road_ids: List[int] = Field(..., min_length=1)
+class RoadEntry(BaseModel):
+    road_id: int = Field(..., ge=0)
+    country_code: str = Field(..., min_length=2, max_length=3)
 
     @field_validator("country_code")
     @classmethod
@@ -42,36 +45,41 @@ class RoadRequest(BaseModel):
             raise ValueError("country_code must contain only letters")
         return value
 
-    @field_validator("road_ids")
+
+class RoadRequest(BaseModel):
+    booking_date: date
+    roads: List[RoadEntry] = Field(..., min_length=1)
+
+    @field_validator("roads")
     @classmethod
-    def validate_road_ids(cls, value: List[int]) -> List[int]:
+    def validate_roads(cls, value: List[RoadEntry]) -> List[RoadEntry]:
         if not value:
-            raise ValueError("road_ids must contain at least one road id")
-        for road_id in value:
-            if road_id < 0:
-                raise ValueError("road_ids must be non-negative integers")
+            raise ValueError("roads must contain at least one road")
         return value
 
 
-class CountsResponse(BaseModel):
+class RoadCountEntry(BaseModel):
+    road_id: int
     country_code: str
+    count: int
+
+
+class CountsResponse(BaseModel):
     booking_date: date
-    counts: Dict[int, int]
+    roads: List[RoadCountEntry]
 
 
 class IncrementSuccessResponse(BaseModel):
     status: Literal["success"]
-    country_code: str
     booking_date: date
-    counts: Dict[int, int]
+    roads: List[RoadCountEntry]
 
 
 class IncrementFailureResponse(BaseModel):
     status: Literal["failed"]
-    country_code: str
     booking_date: date
-    full_roads: List[int]
-    counts: Dict[int, int]
+    full_roads: List[RoadEntry]
+    roads: List[RoadCountEntry]
 
 
 class HealthResponse(BaseModel):
@@ -80,6 +88,7 @@ class HealthResponse(BaseModel):
 
 DECREMENT_LUA = """
 local key = KEYS[1]
+
 for i = 1, #ARGV do
     local field = ARGV[i]
     local current = tonumber(redis.call('HGET', key, field) or '0')
@@ -87,6 +96,7 @@ for i = 1, #ARGV do
         redis.call('HINCRBY', key, field, -1)
     end
 end
+
 return 1
 """
 
@@ -122,6 +132,22 @@ return {'success'}
 """
 
 
+def fetch_counts_for_roads(client: Redis, booking_date: date, roads: List[RoadEntry]) -> List[RoadCountEntry]:
+    key = redis_key(booking_date)
+    fields = [road_field(road.country_code, road.road_id) for road in roads]
+
+    values = client.hmget(key, fields)
+
+    return [
+        RoadCountEntry(
+            road_id=road.road_id,
+            country_code=road.country_code,
+            count=int(value) if value is not None else 0,
+        )
+        for road, value in zip(roads, values)
+    ]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global redis_client
@@ -142,8 +168,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="road-service",
-    version="1.1.0",
-    description="Service for incrementing, decrementing, and reading road booking counts per country and date.",
+    version="1.3.0",
+    description="Service for incrementing, decrementing, and reading road booking counts per road-country and date.",
     lifespan=lifespan,
 )
 
@@ -164,8 +190,9 @@ def health() -> HealthResponse:
 def increment_counts(
     request: RoadRequest,
 ) -> Union[IncrementSuccessResponse, IncrementFailureResponse]:
-    key = redis_key(request.country_code, request.booking_date)
     client = get_redis()
+    key = redis_key(request.booking_date)
+    fields = [road_field(road.country_code, road.road_id) for road in request.roads]
 
     try:
         result = client.eval(
@@ -173,79 +200,67 @@ def increment_counts(
             1,
             key,
             str(MAX_CAPACITY_PER_ROAD),
-            *[str(road_id) for road_id in request.road_ids],
+            *fields,
         )
 
-        values = client.hmget(key, [str(road_id) for road_id in request.road_ids])
+        current_counts = fetch_counts_for_roads(client, request.booking_date, request.roads)
+
     except RedisError as exc:
         raise HTTPException(status_code=500, detail=f"Redis error: {exc}") from exc
-
-    counts = {
-        road_id: int(value) if value is not None else 0
-        for road_id, value in zip(request.road_ids, values)
-    }
 
     if not result or result[0] not in ("success", "failed"):
         raise HTTPException(status_code=500, detail="Unexpected Redis response")
 
     if result[0] == "failed":
-        full_roads = [int(road_id) for road_id in result[1:]]
+        full_fields = set(result[1:])
+        full_roads = [
+            RoadEntry(road_id=road.road_id, country_code=road.country_code)
+            for road in request.roads
+            if road_field(road.country_code, road.road_id) in full_fields
+        ]
+
         return IncrementFailureResponse(
             status="failed",
-            country_code=request.country_code,
             booking_date=request.booking_date,
             full_roads=full_roads,
-            counts=counts,
+            roads=current_counts,
         )
 
     return IncrementSuccessResponse(
         status="success",
-        country_code=request.country_code,
         booking_date=request.booking_date,
-        counts=counts,
+        roads=current_counts,
     )
 
 
 @app.post("/roads/decrement", response_model=CountsResponse)
 def decrement_counts(request: RoadRequest) -> CountsResponse:
-    key = redis_key(request.country_code, request.booking_date)
     client = get_redis()
+    key = redis_key(request.booking_date)
+    fields = [road_field(road.country_code, road.road_id) for road in request.roads]
 
     try:
-        client.eval(DECREMENT_LUA, 1, key, *[str(road_id) for road_id in request.road_ids])
-        values = client.hmget(key, [str(road_id) for road_id in request.road_ids])
+        client.eval(DECREMENT_LUA, 1, key, *fields)
+        current_counts = fetch_counts_for_roads(client, request.booking_date, request.roads)
     except RedisError as exc:
         raise HTTPException(status_code=500, detail=f"Redis error: {exc}") from exc
 
-    counts = {
-        road_id: int(value) if value is not None else 0
-        for road_id, value in zip(request.road_ids, values)
-    }
-
     return CountsResponse(
-        country_code=request.country_code,
         booking_date=request.booking_date,
-        counts=counts,
+        roads=current_counts,
     )
 
 
 @app.post("/roads/counts", response_model=CountsResponse)
 def get_counts(request: RoadRequest) -> CountsResponse:
-    key = redis_key(request.country_code, request.booking_date)
     client = get_redis()
 
     try:
-        values = client.hmget(key, [str(road_id) for road_id in request.road_ids])
+        current_counts = fetch_counts_for_roads(client, request.booking_date, request.roads)
     except RedisError as exc:
         raise HTTPException(status_code=500, detail=f"Redis error: {exc}") from exc
 
-    counts = {
-        road_id: int(value) if value is not None else 0
-        for road_id, value in zip(request.road_ids, values)
-    }
-
     return CountsResponse(
-        country_code=request.country_code,
         booking_date=request.booking_date,
-        counts=counts,
+        roads=current_counts,
     )
