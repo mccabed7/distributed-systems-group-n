@@ -1,8 +1,11 @@
 import redis
 from async_sendgrid import SendgridAPI
 from sendgrid import Mail
+from logger import get_logger
 
 PROCESSING_TTL = 3_600
+
+logger = get_logger("clients")
 
 
 class RedisClient:
@@ -53,10 +56,14 @@ class RedisClient:
 
 class EmailClient:
     def __init__(self, api_key: str, from_email: str):
-        self._sendgrid = SendgridAPI(api_key=api_key)
+        if api_key:
+            self._sendgrid = SendgridAPI(api_key=api_key)
         self._from_email = from_email
 
     async def send(self, email: str, subject: str, content: str) -> None:
+        if not self._sendgrid:
+            logger.info("SendGrid is not configured, skipping email delivery...")
+            return
         mail = Mail(
             from_email=self._from_email,
             to_emails=email,

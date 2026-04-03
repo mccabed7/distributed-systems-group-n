@@ -20,11 +20,10 @@ SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL")
 
 
 async def main() -> None:
-    if not BOOTSTRAP_SERVERS and TOPIC and GROUP_ID and REDIS_HOST and REDIS_PORT and HOSTNAME and SENDGRID_API_KEY \
-            and SENDGRID_FROM_EMAIL:
+    if not (BOOTSTRAP_SERVERS and TOPIC and GROUP_ID and REDIS_HOST and REDIS_PORT and HOSTNAME):
         logger.error(
             "Missing configuration, ensure KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPIC, KAFKA_GROUP_ID, "
-            "REDIS_HOST, REDIST_PORT, HOSTNAME, SENDGRID_API_KEY and SENDGRID_FROM_EMAIL environment variables are set",
+            "REDIS_HOST, REDIST_PORT and HOSTNAME environment variables are set",
         )
         exit(1)
 
