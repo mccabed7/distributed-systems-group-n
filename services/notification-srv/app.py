@@ -15,13 +15,16 @@ GROUP_ID = os.getenv("KAFKA_GROUP_ID")
 REDIS_HOST = os.getenv("REDIS_HOST")
 REDIS_PORT = int(os.getenv("REDIS_PORT"))
 HOSTNAME = os.getenv("HOSTNAME")
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL")
 
 
 async def main() -> None:
-    if not (BOOTSTRAP_SERVERS and TOPIC and GROUP_ID and REDIS_HOST and REDIS_PORT and HOSTNAME):
+    if not BOOTSTRAP_SERVERS and TOPIC and GROUP_ID and REDIS_HOST and REDIS_PORT and HOSTNAME and SENDGRID_API_KEY \
+            and SENDGRID_FROM_EMAIL:
         logger.error(
             "Missing configuration, ensure KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPIC, KAFKA_GROUP_ID, "
-            "REDIS_HOST, REDIST_PORT and HOSTNAME environment variables are set",
+            "REDIS_HOST, REDIST_PORT, HOSTNAME, SENDGRID_API_KEY and SENDGRID_FROM_EMAIL environment variables are set",
         )
         exit(1)
 
@@ -38,12 +41,15 @@ async def main() -> None:
     push_notifications = PushNotificationConsumer(ws_pool, REDIS_HOST, REDIS_PORT, pod_id=HOSTNAME)
     await push_notifications.connect()
 
+    mail_client = clients.EmailClient(api_key=SENDGRID_API_KEY, from_email=SENDGRID_FROM_EMAIL)
+
     consumer = NotificationConsumer(
         topic=TOPIC,
         bootstrap_servers=BOOTSTRAP_SERVERS,
         group_id=GROUP_ID,
         pod_id=HOSTNAME,
         redis=redis_client,
+        mail=mail_client,
     )
     consumer.connect()
 

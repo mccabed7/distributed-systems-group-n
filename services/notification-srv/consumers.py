@@ -13,12 +13,14 @@ logger = get_logger("consumers")
 class NotificationConsumer:
     _consumer: AIOKafkaConsumer
 
-    def __init__(self, topic: str, bootstrap_servers: str, group_id: str, pod_id: str, redis: clients.RedisClient):
+    def __init__(self, topic: str, bootstrap_servers: str, group_id: str, pod_id: str, redis: clients.RedisClient,
+                 mail: clients.EmailClient):
         self._topic = topic
         self._bootstrap_servers = bootstrap_servers
         self._group_id = group_id
         self._pod_id = pod_id
         self._redis = redis
+        self._mail = mail
 
     def connect(self) -> None:
         logger.info("Attempting to connect to Kafka broker")
@@ -75,7 +77,8 @@ class NotificationConsumer:
             logger.info("Message is PUSH notification, message_id=%s", message.message_id)
             await self._redis.fanout_publish_message(message.user_id, raw_message)
         elif message.delivery_type == messages.DeliveryType.EMAIL.value:
-            logger.info("Message is EMAIL notification, key=%s", key)
+            logger.info("Message is EMAIL notification, message_id=%s", message.message_id)
+            await self._mail.send(message.email, message.subject, message.content)
 
         await self._redis.complete_message(message.message_id)
         await self._consumer.commit()

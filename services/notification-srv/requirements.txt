@@ -4,4 +4,6 @@ kafka-python==2.3.0
 pydantic==2.12.5
 pydantic_core==2.41.5
 redis==7.4.0
+sendgrid==6.12.5
+sendgrid-async==2.1.1
 websockets==16.0

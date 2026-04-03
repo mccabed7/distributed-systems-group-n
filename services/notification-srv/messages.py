@@ -26,6 +26,7 @@ class PushMessage(Message):
 class EmailMessage(Message):
     delivery_type: Literal[DeliveryType.EMAIL] = DeliveryType.EMAIL.value
     email: EmailStr
+    subject: str
 
 
 Notification = Annotated[Union[PushMessage, EmailMessage], Field(discriminator="delivery_type")]
