@@ -64,6 +64,8 @@ services:
       KAFKA_GROUP_ID: notification-srv-consumer-group
       REDIS_HOST: redis
       REDIS_PORT: 6379
+    env_file:
+      - ../services/notification-srv/.env
     deploy:
       replicas: 3
 
