@@ -1,0 +1,5 @@
+### Secrets shouldn't be injected into the image
+.env
+
+### Caches are execution environment specific
+__pycache__
