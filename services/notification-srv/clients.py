@@ -1,4 +1,6 @@
 import redis
+from async_sendgrid import SendgridAPI
+from sendgrid import Mail
 
 PROCESSING_TTL = 3_600
 
@@ -47,3 +49,18 @@ class RedisClient:
 
         for pod in alive:
             await self._client.publish(f"pod:{pod}", content)
+
+
+class EmailClient:
+    def __init__(self, api_key: str, from_email: str):
+        self._sendgrid = SendgridAPI(api_key=api_key)
+        self._from_email = from_email
+
+    async def send(self, email: str, subject: str, content: str) -> None:
+        mail = Mail(
+            from_email=self._from_email,
+            to_emails=email,
+            subject=subject,
+            plain_text_content=content,
+        )
+        await self._sendgrid.send(mail)
