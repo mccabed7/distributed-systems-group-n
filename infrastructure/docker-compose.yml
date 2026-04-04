@@ -148,7 +148,22 @@ services:
       USER_SRV_URL: http://user-srv:8000
       BOOKING_SRV_URL: http://booking-srv:8000
       NOTIFICATION_SRV_URL: ws://notification-srv:8080
-      ADMIN_SRV_URL: http://admin-srv:8080
+      ADMIN_SRV_URL: http://admin-srv:8000
+
+  admin-srv:
+    build:
+      context: ../services/admin-srv
+    container_name: admin-srv
+    depends_on:
+      postgres-admin:
+        condition: service_healthy
+    environment:
+      BOOKING_SRV_URL: http://booking-srv:8000
+      POSTGRES_HOST: postgres-admin
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DATABASE: admin_db
 
 volumes:
   redis-data:
