@@ -6,6 +6,7 @@ import AdminPage from "./pages/AdminPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Navbar from "./components/Navbar";
 import { useAuth } from "./context/AuthContext";
+import NotificationsPanel from "./components/NotificationsPanel"
 
 export default function App() {
   const { isAuthenticated } = useAuth();
@@ -44,6 +45,7 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
+      <NotificationsPanel />
     </>
   );
 }

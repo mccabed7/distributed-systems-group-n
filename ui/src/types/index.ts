@@ -21,3 +21,8 @@ export interface Booking extends BookingRequest {
   id: string;
   status: BookingStatus;
 };
+
+export interface Notification {
+  message_id: string;
+  content: string;
+}
