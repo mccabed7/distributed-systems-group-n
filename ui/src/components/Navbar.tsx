@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useWebSocket } from "../context/WebSocketContext"
 
 interface LinkProps {
   to: string;
@@ -13,6 +14,22 @@ const Link = ({ to, children }: LinkProps) => (
     {children}
   </NavLink>
 )
+
+const WebSocketState = () => {
+  const { status } = useWebSocket();
+
+  let colour = "green";
+  let suffix = "";
+  if (status === "disconnected") {
+    colour = "orange";
+    suffix = " Reconnecting";
+  } else if (status === "error") {
+    colour = "red";
+    suffix = " Failed";
+  }
+
+  return <span style={{ marginLeft: "1em", color: colour }}>● WS{suffix}</span>
+}
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -39,6 +56,7 @@ export default function Navbar() {
               {user.username} ({user.role})
             </span>
             <button onClick={handleLogout}>Logout</button>
+            <WebSocketState />
           </>
         )}
       </div>
