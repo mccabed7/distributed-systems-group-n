@@ -15,6 +15,7 @@ logger = get_logger()
 USER_SRV_URL = os.getenv("USER_SRV_URL", "http://user-srv:8000")
 BOOKING_SRV_URL = os.getenv("BOOKING_SRV_URL", "http://booking-srv:8000")
 NOTIFICATION_SRV_URL = os.getenv("NOTIFICATION_SRV_URL", "ws://notification-srv:8080")
+ADMIN_SRV_URL = os.getenv("ADMIN_SRV_URL", "http://admin-srv:8000")
 
 app = FastAPI()
 
@@ -189,6 +190,38 @@ async def cancel_booking(request: Request, booking_id: str) -> Response:
         status_code=response.status_code,
         content=response.content,
         media_type=response.headers.get("content-type"),
+    )
+
+
+@app.get("/admin/bookings/{registration}")
+async def admin_get_bookings_for_registration(request: Request, registration: str) -> Response:
+    """
+    Retrieve a list of bookings for a registration number
+    1. Client sends GET /admin/bookings/{registration}
+    2. Gateway authenticates via user-srv
+    3. If valid, forward the request to admin-srv GET /bookings/{registration}
+    4. Return booking-srv's response
+    """
+    token = _extract_token(request)
+    if token is None:
+        return Response(status_code=401, content="Missing or malformed auth header")
+
+    user = await authenticate(token)
+    if user is None:
+        return Response(status_code=401, content="Unauthorized")
+
+    # Ordinarily, we would also perform a check to limit this to only admin users, however this is a demonstration and
+    # something that is application-related rather than distributed systems-related, so we don't here.
+    try:
+        response = await http_client.get(f"{ADMIN_SRV_URL}/bookings/{registration}")
+    except httpx.RequestError as e:
+        logger.error("Failed to get booking for registration: %s", e)
+        return Response(status_code=502, content="Admin service unavailable")
+
+    return Response(
+        status_code=response.status_code,
+        content=response.content,
+        media_type=response.headers.get("content-type")
     )
 
 
