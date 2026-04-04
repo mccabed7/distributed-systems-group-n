@@ -1,6 +1,7 @@
 import os
 import httpx
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect, status, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import websockets
 import asyncio
 
@@ -16,6 +17,14 @@ BOOKING_SRV_URL = os.getenv("BOOKING_SRV_URL", "http://booking-srv:8000")
 NOTIFICATION_SRV_URL = os.getenv("NOTIFICATION_SRV_URL", "ws://notification-srv:8080")
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "ws://localhost:5173"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "X-Request-Id"],
+    max_age=24 * 60 * 60,
+)
 
 http_client = httpx.AsyncClient()
 
