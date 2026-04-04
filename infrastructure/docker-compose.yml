@@ -50,6 +50,23 @@ services:
       - "6379:6379"
     restart: unless-stopped
 
+  postgres-admin:
+    image: postgres:18
+    container_name: postgres-admin
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: admin_db
+    volumes:
+      - postgres-admin-data:/var/lib/postgresql
+      - ./postgres/init-admin.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U admin -d admin_db" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   notification-srv:
     build:
       context: ../services/notification-srv
@@ -136,3 +153,4 @@ services:
 volumes:
   redis-data:
   postgres-data:
+  postgres-admin-data:
