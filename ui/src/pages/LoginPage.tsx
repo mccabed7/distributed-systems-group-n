@@ -4,14 +4,15 @@ import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login(username, isAdmin ? "admin" : "user");
-    navigate("/bookings");
+    await login(username, password, isAdmin ? "admin" : "user");
+    navigate(isAdmin ? "/admin" : "/bookings");
   };
 
   return (
@@ -23,6 +24,13 @@ export default function LoginPage() {
         placeholder="Username"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
+      />
+
+      <input
+        type="password"
+        placeholder="Password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
       />
 
       <label>

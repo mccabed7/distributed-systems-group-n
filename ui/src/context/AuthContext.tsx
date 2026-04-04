@@ -1,10 +1,11 @@
 import { createContext, useContext, useState, ReactNode } from "react";
 import type { User, Role } from "../types";
+import { useAuthApi } from "../api/auth";
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (username: string, role: Role) => void;
+  login: (username: string, password: string, role: Role) => Promise<void>;
   logout: () => void;
 }
 
@@ -16,16 +17,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return stored ? JSON.parse(stored) : null;
   });
 
-  const login = (username: string, role: Role) => {
-    const mockUser: User = {
-      id: crypto.randomUUID(),
-      username,
-      role,
-      token: "mock-token",
-    };
+  const { login: loginRequest } = useAuthApi();
 
-    setUser(mockUser);
-    localStorage.setItem("user", JSON.stringify(mockUser));
+  const login = async (username: string, password: string, role: Role) => {
+    const user = await loginRequest(username, password);
+    user.role = role;
+    setUser(user);
+    localStorage.setItem("user", JSON.stringify(user));
   };
 
   const logout = () => {
