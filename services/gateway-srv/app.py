@@ -163,6 +163,45 @@ async def get_booking(request: Request, booking_id: str) -> Response:
     )
 
 
+@app.post("/bookings/{booking_id}/cancel")
+async def cancel_booking(request: Request, booking_id: str) -> Response:
+    """
+    Cancel a user's booking
+    1. Client sends POST /bookings/{booking_id}/cancel
+    2. Gateway authenticates via user-srv
+    3. If valid, forward the request body to booking-srv POST /bookings/{booking_id}/cancel with X-User-Id header
+    4. Return booking-srv's response
+    """
+    token = _extract_token(request)
+    if token is None:
+        return Response(status_code=401, content="Missing or malformed auth header")
+
+    user = await authenticate(token)
+    if user is None:
+        return Response(status_code=401, content="Unauthorized")
+
+    body = await request.body()
+
+    try:
+        response = await http_client.post(
+            f"{BOOKING_SRV_URL}/bookings/{booking_id}/cancel",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "X-User-Id": user["id"]
+            },
+        )
+    except httpx.RequestError as e:
+        logger.error("Failed to cancel booking: %s", e)
+        return Response(status_code=502, content="Booking service unavailable")
+
+    return Response(
+        status_code=response.status_code,
+        content=response.content,
+        media_type=response.headers.get("content-type"),
+    )
+
+
 @app.websocket("/ws")
 async def proxy_websocket_connections(ws: WebSocket):
     """
