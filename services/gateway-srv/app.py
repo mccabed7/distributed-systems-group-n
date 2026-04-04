@@ -210,7 +210,7 @@ async def admin_get_bookings_for_registration(request: Request, registration: st
     1. Client sends GET /admin/bookings/{registration}
     2. Gateway authenticates via user-srv
     3. If valid, forward the request to admin-srv GET /bookings/{registration}
-    4. Return booking-srv's response
+    4. Return admin-srv's response
     """
     token = _extract_token(request)
     if token is None:
