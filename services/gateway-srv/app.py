@@ -86,6 +86,40 @@ async def create_bookings(request: Request) -> Response:
         media_type=response.headers.get("content-type")
     )
 
+
+@app.get("/bookings")
+async def get_bookings(request: Request) -> Response:
+    """
+    Retrieve a list of bookings for a user
+    1. Client sends GET /bookings
+    2. Gateway authenticates via user-srv
+    3. If valid, forward the request body to booking-srv GET /bookings with X-User-Id header
+    4. Return booking-srv's response
+    """
+    token = _extract_token(request)
+    if token is None:
+        return Response(status_code=401, content="Missing or malformed auth header")
+
+    user = await authenticate(token)
+    if user is None:
+        return Response(status_code=401, content="Unauthorized")
+
+    try:
+        response = await http_client.get(
+            f"{BOOKING_SRV_URL}/bookings",
+            headers={"X-User-Id": user["id"]},
+        )
+    except httpx.RequestError as e:
+        logger.error("Failed to get bookings: %s", e)
+        return Response(status_code=502, content="Booking service unavailable")
+
+    return Response(
+        status_code=response.status_code,
+        content=response.content,
+        media_type=response.headers.get("content-type"),
+    )
+
+
 @app.get("/bookings/{booking_id}")
 async def get_booking(request: Request, booking_id: str) -> Response:
     """
