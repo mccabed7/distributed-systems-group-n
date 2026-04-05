@@ -74,7 +74,7 @@ async def create_bookings(request: Request) -> Response:
         response = await http_client.post(
             f"{BOOKING_SRV_URL}/bookings",
             content=body,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "X-User-ID": user["id"]},
         )
     except httpx.RequestError as e:
         logger.error("Failed to create booking: %s", e)
@@ -104,7 +104,10 @@ async def get_booking(request: Request, booking_id: str) -> Response:
         return Response(status_code=401, content="Unauthorized")
 
     try:
-        response = await http_client.get(f"{BOOKING_SRV_URL}/bookings/{booking_id}")
+        response = await http_client.get(
+            f"{BOOKING_SRV_URL}/bookings/{booking_id}",
+            headers={"X-User-ID": user["id"]},
+        )
     except httpx.RequestError as e:
         logger.error("Failed to get booking: %s", e)
         return Response(status_code=502, content="Booking service unavailable")

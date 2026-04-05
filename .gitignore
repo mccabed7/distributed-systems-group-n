@@ -8,6 +8,7 @@ __pycache__
 ### Editors
 .idea
 .vscode
+*.code-workspace
 
 ### Secrets
 .env

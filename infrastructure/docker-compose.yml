@@ -69,6 +69,42 @@ services:
     deploy:
       replicas: 3
 
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_USER: booking
+      POSTGRES_PASSWORD: booking
+      POSTGRES_DB: booking
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U booking -d booking"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  booking-srv:
+    build:
+      context: ../services/booking-srv
+    container_name: booking-srv
+    ports:
+      - "8002:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka-init-topics:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://booking:booking@postgres:5432/booking
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_NOTIFICATIONS_TOPIC: notifications
+      ROAD_SRV_URL: http://road-srv:8000
+      JOURNEY_SRV_URL: ""
+
   road-srv:
     build:
       context: ../services/road-srv
@@ -98,3 +134,4 @@ services:
 
 volumes:
   redis-data:
+  postgres-data:
