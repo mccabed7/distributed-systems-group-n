@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import os
@@ -20,7 +19,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://booking:booking@localhost:5432/booking")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://booking:booking@localhost:5432/booking"
+)
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 KAFKA_NOTIFICATIONS_TOPIC = os.getenv("KAFKA_NOTIFICATIONS_TOPIC", "notifications")
 ROAD_SRV_URL = os.getenv("ROAD_SRV_URL", "http://road-srv:8000")
@@ -123,7 +124,9 @@ def get_http() -> httpx.AsyncClient:
     return http_client
 
 
-async def _publish_notification(user_id: str, booking_id: str, status: BookingStatus) -> None:
+async def _publish_notification(
+    user_id: str, booking_id: str, status: BookingStatus
+) -> None:
     event = {
         "delivery_type": "PUSH",
         "user_id": user_id,
@@ -136,9 +139,13 @@ async def _publish_notification(user_id: str, booking_id: str, status: BookingSt
             value=event,
             key=user_id,
         )
-        logger.info("Published notification booking_id=%s status=%s", booking_id, status.value)
+        logger.info(
+            "Published notification booking_id=%s status=%s", booking_id, status.value
+        )
     except Exception as exc:
-        logger.error("Failed to publish notification booking_id=%s: %s", booking_id, exc)
+        logger.error(
+            "Failed to publish notification booking_id=%s: %s", booking_id, exc
+        )
 
 
 async def _update_status(booking_id: str, status: BookingStatus) -> None:
@@ -164,44 +171,52 @@ async def _check_road_availability(
     if not road_ids:
         # No roads to check — treat as unconditionally successful.
         logger.info("booking_id=%s has no road_ids, marking SUCCESSFUL", booking_id)
-        await _update_status(booking_id, BookingStatus.SUCCESSFUL)
-        await _publish_notification(user_id, booking_id, BookingStatus.SUCCESSFUL)
-        return
+        final_status = BookingStatus.SUCCESSFUL
+    else:
+        try:
+            resp = await get_http().post(
+                f"{ROAD_SRV_URL}/roads/increment",
+                json={
+                    "booking_date": booking_date.isoformat(),
+                    "roads": [
+                        {"road_id": r, "country_code": country_code} for r in road_ids
+                    ],
+                },
+            )
+        except httpx.RequestError as exc:
+            logger.error("Could not reach road-srv for booking_id=%s: %s", booking_id, exc)
+            final_status = BookingStatus.FAILED
+        else:
+            if resp.status_code == 200 and resp.json().get("status") == "success":
+                logger.info("Road capacity reserved for booking_id=%s", booking_id)
+                final_status = BookingStatus.SUCCESSFUL
+            else:
+                logger.info(
+                    "Road capacity unavailable for booking_id=%s road_srv_status=%s",
+                    booking_id,
+                    resp.status_code,
+                )
+                final_status = BookingStatus.FAILED
 
     try:
-        resp = await get_http().post(
-            f"{ROAD_SRV_URL}/roads/increment",
-            json={
-                "country_code": country_code,
-                "booking_date": booking_date.isoformat(),
-                "road_ids": road_ids,
-            },
-        )
-    except httpx.RequestError as exc:
-        logger.error("Could not reach road-srv for booking_id=%s: %s", booking_id, exc)
-        await _update_status(booking_id, BookingStatus.FAILED)
-        await _publish_notification(user_id, booking_id, BookingStatus.FAILED)
-        return
-
-    if resp.status_code == 200 and resp.json().get("status") == "success":
-        logger.info("Road capacity reserved for booking_id=%s", booking_id)
-        await _update_status(booking_id, BookingStatus.SUCCESSFUL)
-        await _publish_notification(user_id, booking_id, BookingStatus.SUCCESSFUL)
-    else:
-        logger.info(
-            "Road capacity unavailable for booking_id=%s road_srv_status=%s",
+        await _update_status(booking_id, final_status)
+        await _publish_notification(user_id, booking_id, final_status)
+    except Exception as exc:
+        logger.error(
+            "Failed to finalise booking_id=%s status=%s: %s",
             booking_id,
-            resp.status_code,
+            final_status.value,
+            exc,
         )
-        await _update_status(booking_id, BookingStatus.FAILED)
-        await _publish_notification(user_id, booking_id, BookingStatus.FAILED)
 
 
 @app.post("/bookings", status_code=202)
 async def create_booking(
     request: CreateBookingRequest,
     background_tasks: BackgroundTasks,
-    x_user_id: str = Header(..., description="Injected by gateway after authentication"),
+    x_user_id: str = Header(
+        ..., description="Injected by gateway after authentication"
+    ),
 ) -> dict:
     """
     Accept a booking request.
@@ -225,7 +240,9 @@ async def create_booking(
                 },
             )
             if resp.status_code == 404:
-                raise HTTPException(status_code=400, detail="No journey found between those locations")
+                raise HTTPException(
+                    status_code=400, detail="No journey found between those locations"
+                )
             if resp.status_code != 200:
                 raise HTTPException(status_code=502, detail="Journey service error")
             road_ids = resp.json().get("road_ids", [])
@@ -252,7 +269,9 @@ async def create_booking(
             road_ids,
         )
 
-    logger.info("Created booking_id=%s user_id=%s status=PENDING", booking_id, x_user_id)
+    logger.info(
+        "Created booking_id=%s user_id=%s status=PENDING", booking_id, x_user_id
+    )
 
     background_tasks.add_task(
         _check_road_availability,
