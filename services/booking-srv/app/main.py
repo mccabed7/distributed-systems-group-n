@@ -41,8 +41,13 @@ CREATE TABLE IF NOT EXISTS bookings (
     booking_date  DATE        NOT NULL,
     country_code  TEXT        NOT NULL,
     road_ids      INTEGER[]   NOT NULL DEFAULT '{}',
+    request_id    TEXT,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )
+"""
+
+MIGRATE_SQL = """
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS request_id TEXT;
 """
 
 
@@ -84,6 +89,7 @@ async def lifespan(app: FastAPI):
     db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
     async with db_pool.acquire() as conn:
         await conn.execute(CREATE_TABLE_SQL)
+        await conn.execute(MIGRATE_SQL)
     logger.info("Database pool ready")
 
     kafka_producer = AIOKafkaProducer(
@@ -217,17 +223,35 @@ async def create_booking(
     x_user_id: str = Header(
         ..., description="Injected by gateway after authentication"
     ),
+    x_request_id: Optional[str] = Header(
+        None, description="Client-supplied idempotency key"
+    ),
 ) -> dict:
     """
     Accept a booking request.
 
-    1. Optionally resolve road_ids via journey-srv (if JOURNEY_SRV_URL is set and
+    1. If X-Request-Id is provided, return the existing booking for that
+       (request_id, user_id) pair if one exists (idempotent retry).
+    2. Optionally resolve road_ids via journey-srv (if JOURNEY_SRV_URL is set and
        road_ids were not supplied by the caller).
-    2. Persist the booking in PENDING state.
-    3. Return 202 Accepted immediately.
-    4. In the background: attempt to reserve road capacity via road-srv, then
+    3. Persist the booking in PENDING state.
+    4. Return 202 Accepted immediately.
+    5. In the background: attempt to reserve road capacity via road-srv, then
        transition the booking to SUCCESSFUL or FAILED and emit a notification.
     """
+    if x_request_id:
+        async with get_db().acquire() as conn:
+            existing = await conn.fetchrow(
+                "SELECT id, status FROM bookings WHERE request_id = $1 AND user_id = $2",
+                x_request_id,
+                x_user_id,
+            )
+        if existing:
+            logger.info(
+                "Idempotent retry request_id=%s booking_id=%s", x_request_id, existing["id"]
+            )
+            return {"id": str(existing["id"]), "status": existing["status"]}
+
     road_ids: List[int] = request.road_ids or []
 
     if not road_ids and JOURNEY_SRV_URL:
@@ -256,8 +280,8 @@ async def create_booking(
         await conn.execute(
             """
             INSERT INTO bookings
-                (id, user_id, status, start_location, end_location, booking_date, country_code, road_ids)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                (id, user_id, status, start_location, end_location, booking_date, country_code, road_ids, request_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             """,
             uuid.UUID(booking_id),
             x_user_id,
@@ -267,6 +291,7 @@ async def create_booking(
             request.booking_date,
             request.country_code,
             road_ids,
+            x_request_id,
         )
 
     logger.info(

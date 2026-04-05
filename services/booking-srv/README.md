@@ -5,16 +5,24 @@ Central coordinator service for the distributed traffic booking system. Accepts 
 ## Responsibilities
 
 1. Accept a booking request and immediately return `202 Accepted` with a `PENDING` status
-2. Optionally resolve road IDs from a journey service (if `JOURNEY_SRV_URL` is configured)
-3. In the background, atomically reserve road capacity via `road-srv`
-4. Transition the booking to `SUCCESSFUL` or `FAILED`
-5. Publish an outcome event to Kafka for the notification service to consume
+2. Deduplicate retries using the `X-Request-Id` idempotency key
+3. Optionally resolve road IDs from a journey service (if `JOURNEY_SRV_URL` is configured)
+4. In the background, atomically reserve road capacity via `road-srv`
+5. Transition the booking to `SUCCESSFUL` or `FAILED`
+6. Publish an outcome event to Kafka for the notification service to consume
 
 ## API
 
 ### `POST /bookings`
 
 Create a new booking. Requires the `x-user-id` header (injected by gateway-srv after authentication).
+
+**Request headers:**
+
+| Header | Required | Description |
+|---|---|---|
+| `X-User-ID` | Yes | Injected by gateway-srv after authentication |
+| `X-Request-Id` | No | Client-supplied idempotency key. If a booking already exists for this key and user, it is returned without creating a new one. |
 
 **Request body:**
 ```json
@@ -36,6 +44,8 @@ Create a new booking. Requires the `x-user-id` header (injected by gateway-srv a
   "status": "PENDING"
 }
 ```
+
+On an idempotent retry (same `X-Request-Id` and `X-User-ID`), the same response is returned with the current status of the original booking (`PENDING`, `SUCCESSFUL`, or `FAILED`).
 
 ---
 
@@ -85,9 +95,12 @@ Returns `200 OK` if the service and database are healthy.
 ```
 POST /bookings
     │
+    ├─ (if X-Request-Id) SELECT bookings WHERE request_id + user_id
+    │     └─ found  →  202 with existing booking (idempotent return)
+    │
     ├─ (optional) POST journey-srv /journeys  →  resolve road_ids
     │
-    ├─ INSERT bookings (status=PENDING)
+    ├─ INSERT bookings (status=PENDING, request_id stored)
     │
     └─ 202 Accepted
          │
@@ -133,6 +146,15 @@ curl http://localhost:8002/health
 curl -s -X POST http://localhost:8002/bookings \
   -H "Content-Type: application/json" \
   -H "x-user-id: user-123" \
+  -H "x-request-id: my-unique-request-id" \
+  -d '{"start_location":"Dublin","end_location":"Cork","booking_date":"2026-05-01","country_code":"IE","road_ids":[1,2]}' \
+  | jq
+
+# Retry with the same x-request-id — returns the original booking instead of creating a new one
+curl -s -X POST http://localhost:8002/bookings \
+  -H "Content-Type: application/json" \
+  -H "x-user-id: user-123" \
+  -H "x-request-id: my-unique-request-id" \
   -d '{"start_location":"Dublin","end_location":"Cork","booking_date":"2026-05-01","country_code":"IE","road_ids":[1,2]}' \
   | jq
 
