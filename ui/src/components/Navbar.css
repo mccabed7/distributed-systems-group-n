@@ -1,0 +1,67 @@
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 0.75rem 1.5rem;
+
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.nav-left,
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.nav-link {
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+  color: var(--color-text-muted);
+  transition: background 0.2s, color 0.2s;
+}
+
+.nav-link:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.nav-link.active {
+  background: var(--color-primary);
+  color: white;
+}
+
+.user-info {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.button-secondary {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.button-secondary:hover {
+  background: var(--color-bg);
+}
+
+.ws-indicator {
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
+}
+
+.ws-indicator.connected {
+  color: var(--color-success);
+}
+
+.ws-indicator.disconnected {
+  color: orange;
+}
+
+.ws-indicator.error {
+  color: var(--color-danger);
+}
