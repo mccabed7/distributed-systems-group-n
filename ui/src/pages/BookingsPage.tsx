@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useBookingsApi } from "../api/bookings";
 import type { Booking } from "../types";
+import BookingsList from "../components/BookingsList";
+import "./BookingsPage.css";
 
 export default function BookingsPage() {
   const { getBookings, cancelBooking } = useBookingsApi();
@@ -26,20 +28,13 @@ export default function BookingsPage() {
   }
 
   return (
-    <div>
+    <div className="bookings-page">
       <h2>My Bookings</h2>
-
-      {bookings.map((b) => (
-        <div key={b.id}>
-          [{b.date}] {b.origin} to {b.destination} ({b.status})
-
-          {b.status !== "cancelled" && (
-            <button onClick={() => handleCancel(b.id)}>
-              Cancel
-            </button>
-          )}
-        </div>
-      ))}
+      <BookingsList
+        bookings={bookings}
+        loading={loading}
+        onCancel={handleCancel}
+      />
     </div>
   );
 }

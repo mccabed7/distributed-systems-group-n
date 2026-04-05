@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useAdminApi } from "../api/admin";
 import type { Booking } from "../types";
+import BookingsList from "../components/BookingsList";
+import "./AdminPage.css";
 
 export default function AdminPage() {
   const { getBookingsForRegistration, cancelBooking } = useAdminApi();
@@ -35,30 +37,39 @@ export default function AdminPage() {
   }
 
   return (
-    <div>
-      <h2>All Bookings (Admin)</h2>
+    <div className="admin-page">
+      <h2>Admin Bookings</h2>
 
-      <input
-        placeholder="Registration"
-        value={registration}
-        onChange={e => setRegistration(e.target.value)}
-      />
+      <div className="card query-card">
+        <div className="query-row">
+          <input
+            className="input"
+            placeholder="Registration"
+            value={registration}
+            onChange={e => setRegistration(e.target.value)}
+            onKeyDown={e => {
+              if (e.key !== "Enter") {
+                return;
+              }
+		      handleBookingQuery();
+            }}
+          />
 
-      <button type="submit" disabled={loading} onClick={handleBookingQuery}>
-        {loading ? "Loading..." : "Query"}
-      </button>
-
-      {bookings.map((b) => (
-        <div key={b.id}>
-          User: {b.userId} | {b.origin} to {b.destination} ({b.status})
-
-          {b.status !== "cancelled" && (
-            <button onClick={() => handleCancel(b.id)}>
-              Cancel
-            </button>
-          )}
+          <button
+            className="button button-primary"
+            onClick={handleBookingQuery}
+            disabled={loading || !registration}
+          >
+            {loading ? "Loading..." : "Query"}
+          </button>
         </div>
-      ))}
+      </div>
+
+      <BookingsList
+        bookings={bookings}
+        loading={loading}
+        onCancel={handleCancel}
+      />
     </div>
   );
 }

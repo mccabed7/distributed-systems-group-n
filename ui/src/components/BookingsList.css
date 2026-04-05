@@ -1,0 +1,46 @@
+.bookings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.booking-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.booking-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.route {
+  font-weight: 600;
+}
+
+.meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.status.booked {
+  color: var(--color-success);
+}
+
+.status.cancelled {
+  color: var(--color-danger);
+}
+
+.booking-actions {
+  display: flex;
+  align-items: center;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--color-text-muted);
+}

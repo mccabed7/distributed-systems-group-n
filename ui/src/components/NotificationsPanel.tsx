@@ -1,12 +1,13 @@
 import { useWebSocket } from "../context/WebSocketContext";
+import "./NotificationsPanel.css";
 
 export default function NotificationsPanel() {
   const { notifications } = useWebSocket();
 
   return (
-    <div style={{ position: "fixed", bottom: 0, right: 0, width: 300 }}>
+    <div className="notifications-panel">
       {notifications.slice(-5).map((n, i) => (
-        <div key={i} style={{ background: "#eee", margin: 2, padding: 4 }}>
+        <div key={i} className="notification">
           {n.content}
         </div>
       ))}

@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useWebSocket } from "../context/WebSocketContext"
+import "./Navbar.css";
 
 interface LinkProps {
   to: string;
@@ -8,9 +9,7 @@ interface LinkProps {
 }
 
 const Link = ({ to, children }: LinkProps) => (
-  <NavLink to={to} style={({ isActive }) => ({
-    fontWeight: isActive ? "bold" : "normal",
-  })}>
+  <NavLink to={to} end className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}>
     {children}
   </NavLink>
 )
@@ -18,17 +17,11 @@ const Link = ({ to, children }: LinkProps) => (
 const WebSocketState = () => {
   const { status } = useWebSocket();
 
-  let colour = "green";
-  let suffix = "";
-  if (status === "disconnected") {
-    colour = "orange";
-    suffix = " Reconnecting";
-  } else if (status === "error") {
-    colour = "red";
-    suffix = " Failed";
-  }
-
-  return <span style={{ marginLeft: "1em", color: colour }}>● WS{suffix}</span>
+  return <span className={`ws-indicator ${status}`}>
+    ● WS
+    {status === "disconnected" && " Reconnecting"}
+    {status === "error" && " Failed"}
+  </span>
 }
 
 export default function Navbar() {
@@ -41,21 +34,22 @@ export default function Navbar() {
   };
 
   return (
-    <nav style={{ display: "flex", gap: "1rem", padding: "1rem", borderBottom: "1px solid #ccc" }}>
-      <Link to="/bookings">Bookings</Link>
-      <Link to="/bookings/new">Create Booking</Link>
+    <nav className="navbar">
+      <div className="nav-left">
+        <Link to="/bookings">Bookings</Link>
+        <Link to="/bookings/new">Create Booking</Link>
+        {user?.role === "admin" && (
+          <Link to="/admin">Admin</Link>
+        )}
+      </div>
 
-      {user?.role === "admin" && (
-        <Link to="/admin">Admin</Link>
-      )}
-
-      <div style={{ marginLeft: "auto" }}>
+      <div className="nav-right">
         {user && (
           <>
-            <span style={{ marginRight: "1rem" }}>
+            <span className="user-info">
               {user.username} ({user.role})
             </span>
-            <button onClick={handleLogout}>Logout</button>
+            <button className="button button-secondary" onClick={handleLogout}>Logout</button>
             <WebSocketState />
           </>
         )}

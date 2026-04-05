@@ -7,6 +7,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Navbar from "./components/Navbar";
 import { useAuth } from "./context/AuthContext";
 import NotificationsPanel from "./components/NotificationsPanel"
+import "./App.css";
 
 export default function App() {
   const { isAuthenticated } = useAuth();
@@ -15,37 +16,39 @@ export default function App() {
   const showNavbar = isAuthenticated && location.pathname !== "/login";
 
   return (
-    <>
+    <div className="app-container">
       {showNavbar && <Navbar />}
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route
-          path="/bookings"
-          element={
-            <ProtectedRoute>
-              <BookingsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/bookings/new"
-          element={
-            <ProtectedRoute>
-              <CreateBookingPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute requireAdmin>
-              <AdminPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="*" element={<Navigate to="/login" />} />
-      </Routes>
+      <div className="page-container">
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/bookings"
+            element={
+              <ProtectedRoute>
+                <BookingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/bookings/new"
+            element={
+              <ProtectedRoute>
+                <CreateBookingPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute requireAdmin>
+                <AdminPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/login" />} />
+        </Routes>
+      </div>
       <NotificationsPanel />
-    </>
+    </div>
   );
 }
