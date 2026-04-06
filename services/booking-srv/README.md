@@ -8,8 +8,10 @@ Central coordinator service for the distributed traffic booking system. Accepts 
 2. Deduplicate retries using the `X-Request-Id` idempotency key
 3. Optionally resolve road IDs from a journey service (if `JOURNEY_SRV_URL` is configured)
 4. In the background, atomically reserve road capacity via `road-srv`
-5. Transition the booking to `SUCCESSFUL` or `FAILED`
+5. Transition the booking to `SUCCESSFUL`, `FAILED`, or `CANCELLED`
 6. Publish an outcome event to Kafka for the notification service to consume
+7. List bookings for one or more users
+8. Cancel a booking and release its road capacity
 
 ## API
 
@@ -68,7 +70,62 @@ Retrieve a booking by ID. Poll this endpoint to check for the final status after
 }
 ```
 
-Possible `status` values: `PENDING`, `SUCCESSFUL`, `FAILED`.
+Possible `status` values: `PENDING`, `SUCCESSFUL`, `FAILED`, `CANCELLED`.
+
+---
+
+### `GET /bookings`
+
+Returns a list of bookings for the user(s) specified in the `X-User-ID` header. Supports multiple user IDs for admin use cases.
+
+**Request headers:**
+
+| Header | Required | Description |
+|---|---|---|
+| `X-User-ID` | Yes | One or more user IDs (repeated header or comma-separated). Injected by gateway-srv. |
+
+**Response `200 OK`:**
+```json
+[
+  {
+    "id": "8708aad5-0bde-4d5a-ab79-0da307a05025",
+    "user_id": "user-123",
+    "status": "SUCCESSFUL",
+    "start_location": "Dublin",
+    "end_location": "Cork",
+    "booking_date": "2026-05-01",
+    "country_code": "IE",
+    "road_ids": [1, 2, 3],
+    "created_at": "2026-05-01T10:00:00+00:00"
+  }
+]
+```
+
+---
+
+### `POST /bookings/{booking_id}/cancel`
+
+Cancels an existing booking and releases its road capacity back to `road-srv`.
+
+**Request headers:**
+
+| Header | Required | Description |
+|---|---|---|
+| `X-User-ID` | Yes | Injected by gateway-srv after authentication |
+
+**Response `200 OK`:**
+```json
+{
+  "id": "8708aad5-0bde-4d5a-ab79-0da307a05025",
+  "status": "CANCELLED"
+}
+```
+
+**Error responses:**
+- `404` — booking not found
+- `409` — booking is still `PENDING` (road reservation may be in-flight; cancellation is unsafe)
+
+If the booking was `SUCCESSFUL`, road capacity is decremented via `road-srv` before the status is updated. A cancellation notification is published to Kafka.
 
 ---
 
@@ -160,6 +217,22 @@ curl -s -X POST http://localhost:8002/bookings \
 
 # Poll for final status
 curl -s http://localhost:8002/bookings/<id> | jq .status
+
+# List bookings for a user
+curl -s http://localhost:8002/bookings \
+  -H "x-user-id: user-123" \
+  | jq
+
+# List bookings for multiple users (admin use case)
+curl -s http://localhost:8002/bookings \
+  -H "x-user-id: user-123" \
+  -H "x-user-id: user-456" \
+  | jq
+
+# Cancel a booking
+curl -s -X POST http://localhost:8002/bookings/<id>/cancel \
+  -H "x-user-id: user-123" \
+  | jq
 ```
 
 ## Tech stack
