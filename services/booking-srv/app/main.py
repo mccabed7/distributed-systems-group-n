@@ -5,7 +5,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 from enum import Enum
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
 import asyncpg
 import httpx
@@ -55,6 +55,7 @@ class BookingStatus(str, Enum):
     PENDING = "PENDING"
     SUCCESSFUL = "SUCCESSFUL"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
 class CreateBookingRequest(BaseModel):
@@ -341,6 +342,89 @@ async def get_booking(booking_id: str) -> dict:
         "road_ids": list(row["road_ids"]),
         "created_at": row["created_at"].isoformat(),
     }
+
+
+@app.get("/bookings")
+async def list_bookings(
+    x_user_id: Annotated[List[str] | None, Header()] = None,
+) -> list:
+    if not x_user_id:
+        raise HTTPException(status_code=400, detail="X-User-ID header is required")
+
+    async with get_db().acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, user_id, status, start_location, end_location,
+                   booking_date, country_code, road_ids, created_at
+            FROM bookings WHERE user_id = ANY($1)
+            ORDER BY created_at DESC
+            """,
+            x_user_id,
+        )
+
+    return [
+        {
+            "id": str(row["id"]),
+            "user_id": row["user_id"],
+            "status": row["status"],
+            "start_location": row["start_location"],
+            "end_location": row["end_location"],
+            "booking_date": row["booking_date"].isoformat(),
+            "country_code": row["country_code"],
+            "road_ids": list(row["road_ids"]),
+            "created_at": row["created_at"].isoformat(),
+        }
+        for row in rows
+    ]
+
+
+@app.post("/bookings/{booking_id}/cancel", status_code=200)
+async def cancel_booking(
+    booking_id: str,
+    x_user_id: str = Header(..., description="Injected by gateway after authentication"),
+) -> dict:
+    try:
+        booking_uuid = uuid.UUID(booking_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    async with get_db().acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, user_id, status, booking_date, country_code, road_ids FROM bookings WHERE id = $1",
+            booking_uuid,
+        )
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    if row["status"] == BookingStatus.CANCELLED:
+        return {"id": booking_id, "status": BookingStatus.CANCELLED}
+
+    if row["status"] == BookingStatus.PENDING:
+        raise HTTPException(status_code=409, detail="Cannot cancel a booking that is still pending")
+
+    if row["status"] == BookingStatus.SUCCESSFUL and row["road_ids"]:
+        try:
+            resp = await get_http().post(
+                f"{ROAD_SRV_URL}/roads/decrement",
+                json={
+                    "booking_date": row["booking_date"].isoformat(),
+                    "roads": [
+                        {"road_id": r, "country_code": row["country_code"]}
+                        for r in row["road_ids"]
+                    ],
+                },
+            )
+            if resp.status_code != 200:
+                logger.error("road-srv decrement failed for booking_id=%s status=%s", booking_id, resp.status_code)
+        except httpx.RequestError as exc:
+            logger.error("Could not reach road-srv to decrement booking_id=%s: %s", booking_id, exc)
+
+    await _update_status(booking_id, BookingStatus.CANCELLED)
+    await _publish_notification(x_user_id, booking_id, BookingStatus.CANCELLED)
+
+    logger.info("Cancelled booking_id=%s user_id=%s", booking_id, x_user_id)
+    return {"id": booking_id, "status": BookingStatus.CANCELLED}
 
 
 @app.get("/health")
