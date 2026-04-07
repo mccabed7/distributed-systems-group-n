@@ -1,9 +1,10 @@
 import os
 import httpx
-from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect, status, HTTPException
+from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect, status, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 import websockets
 import asyncio
+from typing import Optional
 
 from starlette.websockets import WebSocketState
 from websockets import ConnectionClosed, ClientConnection
@@ -52,12 +53,15 @@ async def authenticate(token: str) -> dict | None:
     return resp.json()
 
 @app.post("/bookings")
-async def create_bookings(request: Request) -> Response:
+async def create_bookings(
+    request: Request,
+    x_request_id: Optional[str] = Header(None, description="Client-supplied idempotency key"),
+) -> Response:
     """
     Create a booking
     1. Client sends POST /bookings with a token
     2. Gateway authenticates user via user-srv
-    3. If valid, forward the request body to booking-srv POST /bookings
+    3. If valid, forward the request body to booking-srv POST /bookings with the X-User-ID and X-Request-ID headers
     4. Return booking-srv's response
     """
     token = _extract_token(request)
@@ -69,12 +73,18 @@ async def create_bookings(request: Request) -> Response:
         return Response(status_code=401, content="Unauthorized")
 
     body = await request.body()
+    headers = {
+        "Content-Type": "application/json",
+        "X-User-ID": user["id"],
+    }
+    if x_request_id:
+        headers["X-Request-Id"] = x_request_id
 
     try:
         response = await http_client.post(
             f"{BOOKING_SRV_URL}/bookings",
             content=body,
-            headers={"Content-Type": "application/json", "X-User-ID": user["id"]},
+            headers=headers,
         )
     except httpx.RequestError as e:
         logger.error("Failed to create booking: %s", e)
