@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS bookings (
 
 MIGRATE_SQL = """
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS request_id TEXT;
+
+ALTER TABLE bookings ALTER COLUMN road_ids TYPE BIGINT[] USING road_ids::BIGINT[];
 """
 
 
@@ -271,7 +273,7 @@ async def create_booking(
                 )
             if resp.status_code != 201:
                 raise HTTPException(status_code=502, detail="Journey service error")
-            road_ids = resp.json().get("road_ids", [])
+            road_ids = [way.get("way_id") for way in resp.json().get("way_ids", []) if way.get("way_id")]
         except httpx.RequestError as exc:
             logger.error("Could not reach journey-srv: %s", exc)
             raise HTTPException(status_code=502, detail="Journey service unavailable")
