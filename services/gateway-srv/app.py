@@ -86,6 +86,7 @@ async def create_bookings(
             f"{BOOKING_SRV_URL}/bookings",
             content=body,
             headers=headers,
+            timeout=30,
         )
     except httpx.RequestError as e:
         logger.error("Failed to create booking: %s", e)
@@ -191,6 +192,7 @@ async def cancel_booking(request: Request, booking_id: str) -> Response:
                 "Content-Type": "application/json",
                 "X-User-Id": user["id"]
             },
+            timeout=15,
         )
     except httpx.RequestError as e:
         logger.error("Failed to cancel booking: %s", e)
