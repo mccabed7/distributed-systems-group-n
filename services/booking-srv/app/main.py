@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -424,7 +425,11 @@ async def cancel_booking(
             logger.error("Could not reach road-srv to decrement booking_id=%s: %s", booking_id, exc)
 
     await _update_status(booking_id, BookingStatus.CANCELLED)
-    await _publish_notification(x_user_id, booking_id, BookingStatus.CANCELLED)
+
+    ids = {row["user_id"], x_user_id}
+    await asyncio.gather(
+        *[_publish_notification(user_id, booking_id, BookingStatus.CANCELLED) for user_id in ids]
+    )
 
     logger.info("Cancelled booking_id=%s user_id=%s", booking_id, x_user_id)
     return {"id": booking_id, "status": BookingStatus.CANCELLED}
