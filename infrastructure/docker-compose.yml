@@ -120,7 +120,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_NOTIFICATIONS_TOPIC: notifications
       ROAD_SRV_URL: http://road-srv:8000
-      JOURNEY_SRV_URL: ""
+      JOURNEY_SRV_URL: http://journey-srv:8000
 
   road-srv:
     build:
@@ -165,6 +165,18 @@ services:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
       POSTGRES_DATABASE: admin_db
+
+  journey-srv:
+    build: ../services/journey-srv
+    container_name: journey-service
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
 volumes:
   redis-data:
