@@ -1,9 +1,10 @@
-import type { Booking } from "../types";
+import type { Booking, CreateRegistrationRequest } from "../types";
 import { useApiClient } from "./client";
 
 interface AdminApi {
   getBookingsForRegistration: (registration: string) => Promise<Booking[]>;
   cancelBooking: (id: string) => Promise<void>;
+  createRegistration(request: CreateRegistrationRequest): Promise<void>;
 }
 
 export function useAdminApi(): AdminApi {
@@ -19,5 +20,13 @@ export function useAdminApi(): AdminApi {
       request(`/bookings/${id}/cancel`, {
         method: "POST",
       }),
+
+    createRegistration: body => request(
+      "/admin/registrations",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    ),
   };
 }

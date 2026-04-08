@@ -26,3 +26,8 @@ export interface Notification {
   message_id: string;
   content: string;
 }
+
+export interface CreateRegistrationRequest {
+  user_id: string;
+  registration: string;
+}
