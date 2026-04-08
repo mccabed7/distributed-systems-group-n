@@ -10,7 +10,7 @@ from app.schemas import CreateJourneyRequest, JourneyResponse
 router = APIRouter(prefix="/journeys", tags=["journeys"])
 
 
-@router.post("/", response_model=JourneyResponse, status_code=201)
+@router.post("", response_model=JourneyResponse, status_code=201)
 async def create_journey(request: CreateJourneyRequest, db: Session = Depends(get_db)):
     """
     Geocode origin/destination, fetch a real road route from OSRM,
