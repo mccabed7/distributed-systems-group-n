@@ -3,6 +3,7 @@ import { useAdminApi } from "../api/admin";
 import type { Booking, CreateRegistrationRequest } from "../types";
 import BookingsList from "../components/BookingsList";
 import "./AdminPage.css";
+import { useWebSocket } from "../context/WebSocketContext";
 
 export default function AdminPage() {
   const { getBookingsForRegistration, cancelBooking, createRegistration } = useAdminApi();
@@ -11,6 +12,20 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [createRegistrationRequest, setCreateRegistrationRequest] = useState<CreateRegistrationRequest>({});
   const [creating, setCreating] = useState(false);
+  const { subscribe } = useWebSocket();
+
+  useEffect(() => {
+    return subscribe(msg => {
+      if (!registration) {
+        return;
+      }
+
+      setLoading(true);
+      getBookingsForRegistration(registration)
+        .then(setBookings)
+        .finally(() => setLoading(false));
+    });
+  });
 
   const handleBookingQuery = async (e: React.FormEvent) => {
     if (!registration) {

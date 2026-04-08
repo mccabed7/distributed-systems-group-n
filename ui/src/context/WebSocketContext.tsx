@@ -15,9 +15,12 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 
 type ConnectionState = "connected" | "disconnected" | "error";
 
+type Listener = (message: Notification) => void;
+
 interface WebSocketContextType {
   notifications: any[];
   status: ConnectionState;
+  subscribe: (fn: Listener) => (() => void);
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -32,6 +35,12 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<any[]>([]);
   const seenMessageIds = useRef<Set<string>>(new Set());
   const [status, setStatus] = useState<ConnectionState>("disconnected");
+
+  const listeners = useRef<Set<Listener>>(new Set());
+  const subscribe = (fn: Listener) => {
+    listeners.current.add(fn);
+    return () => listeners.current.delete(fn);
+  };
 
   useEffect(() => {
     if (!user) {
@@ -61,6 +70,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
           seenMessageIds.current.add(data.message_id);
           setNotifications((prev) => [...prev, data]);
+          listeners.current.forEach(fn => fn(data));
         } catch (e) {
           console.error(`Failed to parse notification: ${e}`)
         }
@@ -99,7 +109,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   }, [user, getNextHost]);
 
   return (
-    <WebSocketContext.Provider value={{ notifications, status }}>
+    <WebSocketContext.Provider value={{ notifications, status, subscribe }}>
       {children}
     </WebSocketContext.Provider>
   );
