@@ -27,7 +27,11 @@
   color: var(--color-text-muted);
 }
 
-.status.booked {
+.status {
+  text-transform: capitalize;
+}
+
+.status.successful {
   color: var(--color-success);
 }
 

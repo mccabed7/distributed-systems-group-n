@@ -33,22 +33,22 @@ export default function CreateBookingPage() {
       <form className="card booking-form" onSubmit={handleSubmit}>
         <h2>Create Booking</h2>
         <div className="form-group">
-          <label>Origin</label>
+          <label>Start location</label>
           <input
             className="input"
-            value={request.origin}
-            onChange={(e) => setRequest(previous => ({ ...previous, origin: e.target.value}))}
-            placeholder="Enter origin"
+            value={request.start_location}
+            onChange={(e) => setRequest(previous => ({ ...previous, start_location: e.target.value}))}
+            placeholder="Enter start location"
           />
         </div>
 
         <div className="form-group">
-          <label>Destination</label>
+          <label>End location</label>
           <input
             className="input"
-            value={request.destination}
-            onChange={(e) => setRequest(previous => ({ ...previous, destination: e.target.value}))}
-            placeholder="Enter destination"
+            value={request.end_location}
+            onChange={(e) => setRequest(previous => ({ ...previous, end_location: e.target.value}))}
+            placeholder="Enter end location"
           />
         </div>
 
@@ -66,8 +66,8 @@ export default function CreateBookingPage() {
           <input
             className="input"
             type="date"
-            value={request.date}
-            onChange={(e) => setRequest(previous => ({ ...previous, date: e.target.value}))}
+            value={request.booking_date}
+            onChange={(e) => setRequest(previous => ({ ...previous, booking_date: e.target.value}))}
           />
         </div>
 

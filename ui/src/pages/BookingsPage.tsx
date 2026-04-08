@@ -27,7 +27,7 @@ export default function BookingsPage() {
 
     setBookings((prev) =>
       prev.map((b) =>
-        b.id === id ? { ...b, status: "cancelled" } : b
+        b.id === id ? { ...b, status: "CANCELLED" } : b
       )
     );
   };
