@@ -6,6 +6,7 @@ import asyncpg
 import httpx
 from fastapi import FastAPI, Request, Response
 
+import schema
 from logger import get_logger
 
 logger = get_logger()
@@ -84,6 +85,22 @@ async def get_bookings_for_registration(request: Request, registration: str) -> 
         content=response.content,
         media_type=response.headers.get("content-type"),
     )
+
+
+@app.post("/registrations")
+async def create_registration(request: Request, payload: schema.CreateRegistrationRequest) -> Response:
+    async with request.app.state.db_pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                """
+                INSERT INTO user_registrations (user_id, registration_id)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id, registration_id) DO NOTHING
+                """,
+                payload.user_id,
+                payload.registration_id,
+            )
+    return Response(status_code=201)
 
 
 @app.get("/health")
