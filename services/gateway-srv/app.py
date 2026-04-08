@@ -235,6 +235,42 @@ async def admin_get_bookings_for_registration(request: Request, registration: st
     )
 
 
+@app.post("/admin/registrations")
+async def admin_create_registration(request: Request) -> Response:
+    """
+    Associate a registration number with a user
+    1. Client sends POST /admin/registrations
+    2. Gateway authenticates via user-srv
+    3. If valid, forward the request to admin-srv POST /registrations
+    4. Return admin-srv's response
+    """
+    token = _extract_token(request)
+    if token is None:
+        return Response(status_code=401, content="Missing or malformed auth header")
+
+    user = await authenticate(token)
+    if user is None:
+        return Response(status_code=401, content="Unauthorized")
+
+    body = await request.body()
+
+    try:
+        response = await http_client.post(
+            f"{ADMIN_SRV_URL}/registrations",
+            content=body,
+            headers={"Content-Type": "application/json"},
+        )
+    except httpx.RequestError as e:
+        logger.error("Failed to create registration: %s", e)
+        return Response(status_code=502, content="Admin service unavailable")
+
+    return Response(
+        status_code=response.status_code,
+        content=response.content,
+        media_type=response.headers.get("content-type")
+    )
+
+
 @app.websocket("/ws")
 async def proxy_websocket_connections(ws: WebSocket):
     """
