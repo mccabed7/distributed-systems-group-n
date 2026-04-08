@@ -7,7 +7,7 @@ import "./CreateBookingPage.css";
 export default function CreateBookingPage() {
   const [request, setRequest] = useState<BookingRequest>({});
   const [loading, setLoading] = useState(false);
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   const { createBooking } = useBookingsApi();
   const navigate = useNavigate();
@@ -49,6 +49,15 @@ export default function CreateBookingPage() {
             value={request.destination}
             onChange={(e) => setRequest(previous => ({ ...previous, destination: e.target.value}))}
             placeholder="Enter destination"
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Idempotency key</label>
+          <input
+            className="input"
+            value={idempotencyKey}
+            onChange={(e) => setIdempotencyKey(e.target.value)}
           />
         </div>
 
