@@ -1,6 +1,6 @@
 import { createContext, useContext, useRef, ReactNode } from "react";
 
-const HOSTS = ["localhost:8000"]
+const HOSTS = ["localhost:7998", "localhost:7999", "localhost:8000"]
 
 interface HostContextType {
   getNextHost: () => string;
