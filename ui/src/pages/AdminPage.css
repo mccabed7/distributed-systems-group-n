@@ -16,3 +16,18 @@
 .query-row .input {
   flex: 1;
 }
+
+.registration-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.form-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.form-row .input {
+  flex: 1;
+}
