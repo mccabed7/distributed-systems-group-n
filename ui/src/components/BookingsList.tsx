@@ -26,19 +26,19 @@ export default function BookingList({
         <div key={b.id} className="card booking-item">
           <div className="booking-info">
             <div className="route">
-              {b.origin} to {b.destination}
+              {b.start_location} to {b.end_location}
             </div>
 
             <div className="meta">
-              <span>{new Date(b.date).toLocaleDateString()}</span>
-              <span className={`status ${b.status}`}>
-                {b.status}
+              <span>{new Date(b.booking_date).toLocaleDateString()}</span>
+              <span className={`status ${b.status.toLowerCase()}`}>
+                {b.status.toLowerCase()}
               </span>
             </div>
           </div>
 
           <div className="booking-actions">
-            {b.status !== "cancelled" && (
+            {b.status === "SUCCESSFUL" && (
               <button
                 className="button button-danger"
                 onClick={() => onCancel(b.id)}

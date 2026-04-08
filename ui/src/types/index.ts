@@ -9,12 +9,12 @@ export interface User {
 
 export type Location = string;
 
-export type BookingStatus = "successful" | "cancelled";
+export type BookingStatus = "SUCCESSFUL" | "CANCELLED" | "PENDING" | "FAILED";
 
 export interface BookingRequest {
-  origin: Location;
-  destination: Location;
-  date: string;
+  start_location: Location;
+  end_location: Location;
+  booking_date: string;
 }
 
 export interface Booking extends BookingRequest {
