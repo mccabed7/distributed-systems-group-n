@@ -5,7 +5,7 @@ import type { Location } from "../types"
 import "./CreateBookingPage.css";
 
 export default function CreateBookingPage() {
-  const [request, setRequest] = useState<BookingRequest>({});
+  const [request, setRequest] = useState<BookingRequest>({ country_code: "IE" });
   const [loading, setLoading] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
