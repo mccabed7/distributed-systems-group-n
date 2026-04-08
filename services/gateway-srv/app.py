@@ -271,6 +271,33 @@ async def admin_create_registration(request: Request) -> Response:
     )
 
 
+@app.post("/login")
+async def login(request: Request) -> Response:
+    """
+    Login and obtain a token for future authenticated use
+    1. Client sends POST /login
+    2. Gateway forwards to user-srv POST /login
+    3. Return user-srv's response
+    """
+    body = await request.body()
+
+    try:
+        response = await http_client.post(
+            f"{USER_SRV_URL}/login",
+            content=body,
+            headers=request.headers.get("content-type", "application/json"),
+        )
+    except httpx.RequestError as e:
+        logger.error("Failed to login: %s", e)
+        return Response(status_code=502, content="User service unavailable")
+
+    return Response(
+        status_code=response.status_code,
+        content=response.content,
+        media_type=response.headers.get("content-type"),
+    )
+
+
 @app.websocket("/ws")
 async def proxy_websocket_connections(ws: WebSocket):
     """
