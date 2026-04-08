@@ -260,15 +260,16 @@ async def create_booking(
             resp = await get_http().post(
                 f"{JOURNEY_SRV_URL}/journeys",
                 json={
-                    "start_location": request.start_location,
-                    "end_location": request.end_location,
+                    "origin": request.start_location,
+                    "destination": request.end_location,
                 },
+                timeout=30,
             )
             if resp.status_code == 404:
                 raise HTTPException(
                     status_code=400, detail="No journey found between those locations"
                 )
-            if resp.status_code != 200:
+            if resp.status_code != 201:
                 raise HTTPException(status_code=502, detail="Journey service error")
             road_ids = resp.json().get("road_ids", [])
         except httpx.RequestError as exc:
