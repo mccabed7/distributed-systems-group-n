@@ -119,6 +119,45 @@ async def register(request: Request, payload: schema.RegisterRequest) -> schema.
     return schema.RegisterResponse(id=user_id)
 
 
+@app.get("/users/{token}", response_model=schema.UserResponse)
+async def get_user_by_token(request: Request, token: str) -> schema.UserResponse:
+    """
+    Finds a user by their token.
+    1. Decode the token.
+    2. If successful, lookup the user
+    3. If successful, return the user, otherwise return an error.
+    """
+    try:
+        payload = jwt.decode(token, JWT_SECRET, JWT_ALGORITHM)
+    except jose.JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user_id = payload.get("sub")
+    username = payload.get("username")
+
+    if not user_id or not username:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    async with request.app.state.db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT id, username
+            FROM users
+            WHERE id = $1 AND username = $2
+            """,
+            user_id,
+            username,
+        )
+
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return schema.UserResponse(
+        id=user_id,
+        username=username,
+    )
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}

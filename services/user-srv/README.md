@@ -1,6 +1,6 @@
 ### user-srv
 
-This service exposes two endpoints:
+This service exposes three endpoints:
 
 - `POST /register` to register a user. It accepts `username` and `password` parameters.
 
@@ -18,6 +18,17 @@ curl http://localhost:8003/login -H "Content-Type: application/json" -d '{"usern
 {
 	"id": "b586b350-0ea1-4044-8924-c9c55bb406cb",
 	"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5ZDdlOWEwZS0yZmUxLTRhZGItYTdmZi05YzdmZDc5MDQyYzAiLCJ1c2VybmFtZSI6ImhlbGxvQGVtYWlsLmNvbSIsImV4cCI6MTc3NTc5NTU5NX0.dep498yzuiMvbYemoSq8kQle2RehnJfBg69fsB4aJF0",
+	"username": "hello@email.com",
+}
+```
+
+- `GET /users/:token` finds a user by the token obtained from `POST /login`.
+
+```shell
+curl http://localhost:8003/users/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5ZDdlOWEwZS0yZmUxLTRhZGItYTdmZi05YzdmZDc5MDQyYzAiLCJ1c2VybmFtZSI6ImhlbGxvQGVtYWlsLmNvbSIsImV4cCI6MTc3NTc5NTU5NX0.dep498yzuiMvbYemoSq8kQle2RehnJfBg69fsB4aJF0
+
+{
+	"id": "b586b350-0ea1-4044-8924-c9c55bb406cb",
 	"username": "hello@email.com",
 }
 ```

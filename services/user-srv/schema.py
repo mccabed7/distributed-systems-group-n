@@ -18,3 +18,8 @@ RegisterRequest = LoginRequest
 
 class RegisterResponse(BaseModel):
     id: uuid.UUID
+
+
+class UserResponse(BaseModel):
+    id: uuid.UUID
+    username: str
