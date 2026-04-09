@@ -178,7 +178,25 @@ services:
       timeout: 5s
       retries: 3
 
+  postgres-user:
+    image: postgres:18
+    container_name: postgres-user
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: user
+      POSTGRES_DB: user_db
+    volumes:
+      - postgres-user-data:/var/lib/postgresql
+      - ./postgres/init-user.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user -d user_db" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
 volumes:
   redis-data:
   postgres-data:
   postgres-admin-data:
+  postgres-user-data:
