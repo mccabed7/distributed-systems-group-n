@@ -1,11 +1,14 @@
 import os
 import uuid
 from contextlib import asynccontextmanager
+import datetime
 from typing import AsyncIterator
 
 import asyncpg
+import jose
 from asyncpg import UniqueViolationError
 from fastapi import FastAPI, Request, HTTPException
+from jose import jwt
 from passlib.context import CryptContext
 
 import schema
@@ -18,6 +21,10 @@ POSTGRES_PORT = int(os.getenv("POSTGRES_PORT"))
 POSTGRES_USER = os.getenv("POSTGRES_USER")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 POSTGRES_DATABASE = os.getenv("POSTGRES_DATABASE")
+
+JWT_SECRET = os.getenv("JWT_SECRET")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM")
+JWT_EXPIRY_HOURS = int(os.getenv("JWT_EXPIRY_HOURS"))
 
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -41,6 +48,45 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.post("/login", response_model=schema.LoginResponse)
+async def login(request: Request, payload: schema.LoginRequest) -> schema.LoginResponse:
+    """
+    Logs a user in.
+    1. Fetch the user from the db
+    2. If present, verify the password
+    3. If successful, issue a new JWT token
+    """
+    async with request.app.state.db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT id, username, password
+            FROM users
+            WHERE username = $1
+            """,
+            payload.username
+        )
+
+    if not row:
+        logger.error("No user found, username=%s", payload.username)
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not password_context.verify(payload.password, row["password"]):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    claims = {
+        "sub": str(row["id"]),
+        "username": payload.username,
+        "exp": datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=JWT_EXPIRY_HOURS),
+    }
+    token = jwt.encode(claims, JWT_SECRET, JWT_ALGORITHM)
+
+    return schema.LoginResponse(
+        id=row["id"],
+        username=payload.username,
+        token=token,
+    )
 
 
 @app.post("/register", response_model=schema.RegisterResponse)

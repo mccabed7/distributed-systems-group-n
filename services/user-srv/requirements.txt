@@ -2,4 +2,5 @@ asyncpg==0.31.0
 bcrypt==3.2.2
 fastapi==0.115.12
 passlib[bcrypt]==1.7.4
+python-jose==3.5.0
 uvicorn==0.34.2
