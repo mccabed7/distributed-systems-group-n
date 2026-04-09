@@ -66,6 +66,22 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+  
+  postgres-user:
+    image: postgres:17-alpine
+    container_name: postgres-user
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: user
+      POSTGRES_DB: user
+    volumes:
+      - postgres-user-data:/var/lib/postgresql
+      #- ./postgres/init-admin.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U admin -d admin_db" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   notification-srv:
     build:
@@ -138,6 +154,19 @@ services:
       REDIS_DB: 1
       SERVICE_PORT: "8000"
 
+  user-srv:
+    build:
+      context: ../services/user-srv
+      dockerfile: Dockerfile
+    depends_on:
+      postgres-user:
+        condition: service_healthy
+    container_name: user-srv
+    ports:
+      - "8003:8000"
+    environment:
+      DATABASE_URL: postgresql://user:user@postgres-user:5432/user
+
   gateway-srv:
     build:
       context: ../services/gateway-srv
@@ -182,3 +211,4 @@ volumes:
   redis-data:
   postgres-data:
   postgres-admin-data:
+  postgres-user-data:
