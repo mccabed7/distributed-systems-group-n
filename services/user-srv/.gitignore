@@ -1,0 +1,3 @@
+### The .env file only contains dummy data and is useful
+### to share to avoid setup headaches.
+!.env
