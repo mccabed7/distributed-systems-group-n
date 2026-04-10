@@ -23,12 +23,14 @@ logger = logging.getLogger(__name__)
 DATABASE_URL = os.getenv(
     "DATABASE_URL", "postgresql://booking:booking@localhost:5432/booking"
 )
+REPLICA_DATABASE_URL = os.getenv("REPLICA_DATABASE_URL", DATABASE_URL)
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 KAFKA_NOTIFICATIONS_TOPIC = os.getenv("KAFKA_NOTIFICATIONS_TOPIC", "notifications")
 ROAD_SRV_URL = os.getenv("ROAD_SRV_URL", "http://road-srv:8000")
 JOURNEY_SRV_URL = os.getenv("JOURNEY_SRV_URL", "")  # optional
 
 db_pool: asyncpg.Pool | None = None
+db_replica_pool: asyncpg.Pool | None = None
 kafka_producer: AIOKafkaProducer | None = None
 http_client: httpx.AsyncClient | None = None
 
@@ -88,13 +90,18 @@ class CreateBookingRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global db_pool, kafka_producer, http_client
+    global db_pool, db_replica_pool, kafka_producer, http_client
 
     db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
     async with db_pool.acquire() as conn:
         await conn.execute(CREATE_TABLE_SQL)
         await conn.execute(MIGRATE_SQL)
     logger.info("Database pool ready")
+
+    db_replica_pool = await asyncpg.create_pool(
+        REPLICA_DATABASE_URL, min_size=2, max_size=10
+    )
+    logger.info("Replica database pool ready")
 
     kafka_producer = AIOKafkaProducer(
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
@@ -111,6 +118,7 @@ async def lifespan(app: FastAPI):
     await kafka_producer.stop()
     await http_client.aclose()
     await db_pool.close()
+    await db_replica_pool.close()
 
 
 app = FastAPI(title="booking-service", version="1.0.0", lifespan=lifespan)
@@ -120,6 +128,12 @@ def get_db() -> asyncpg.Pool:
     if db_pool is None:
         raise RuntimeError("DB pool not initialized")
     return db_pool
+
+
+def get_replica_db() -> asyncpg.Pool:
+    if db_replica_pool is None:
+        raise RuntimeError("Replica DB pool not initialized")
+    return db_replica_pool
 
 
 def get_kafka() -> AIOKafkaProducer:
@@ -194,7 +208,9 @@ async def _check_road_availability(
                 },
             )
         except httpx.RequestError as exc:
-            logger.error("Could not reach road-srv for booking_id=%s: %s", booking_id, exc)
+            logger.error(
+                "Could not reach road-srv for booking_id=%s: %s", booking_id, exc
+            )
             final_status = BookingStatus.FAILED
         else:
             if resp.status_code == 200 and resp.json().get("status") == "success":
@@ -252,7 +268,9 @@ async def create_booking(
             )
         if existing:
             logger.info(
-                "Idempotent retry request_id=%s booking_id=%s", x_request_id, existing["id"]
+                "Idempotent retry request_id=%s booking_id=%s",
+                x_request_id,
+                existing["id"],
             )
             return {"id": str(existing["id"]), "status": existing["status"]}
 
@@ -274,7 +292,11 @@ async def create_booking(
                 )
             if resp.status_code != 201:
                 raise HTTPException(status_code=502, detail="Journey service error")
-            road_ids = [way.get("way_id") for way in resp.json().get("way_ids", []) if way.get("way_id")]
+            road_ids = [
+                way.get("way_id")
+                for way in resp.json().get("way_ids", [])
+                if way.get("way_id")
+            ]
         except httpx.RequestError as exc:
             logger.error("Could not reach journey-srv: %s", exc)
             raise HTTPException(status_code=502, detail="Journey service unavailable")
@@ -322,7 +344,7 @@ async def get_booking(booking_id: str) -> dict:
     except ValueError:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    async with get_db().acquire() as conn:
+    async with get_replica_db().acquire() as conn:
         row = await conn.fetchrow(
             """
             SELECT id, user_id, status, start_location, end_location,
@@ -355,7 +377,7 @@ async def list_bookings(
     if not x_user_id:
         raise HTTPException(status_code=400, detail="X-User-ID header is required")
 
-    async with get_db().acquire() as conn:
+    async with get_replica_db().acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT id, user_id, status, start_location, end_location,
@@ -385,7 +407,9 @@ async def list_bookings(
 @app.post("/bookings/{booking_id}/cancel", status_code=200)
 async def cancel_booking(
     booking_id: str,
-    x_user_id: str = Header(..., description="Injected by gateway after authentication"),
+    x_user_id: str = Header(
+        ..., description="Injected by gateway after authentication"
+    ),
 ) -> dict:
     try:
         booking_uuid = uuid.UUID(booking_id)
@@ -405,7 +429,9 @@ async def cancel_booking(
         return {"id": booking_id, "status": BookingStatus.CANCELLED}
 
     if row["status"] == BookingStatus.PENDING:
-        raise HTTPException(status_code=409, detail="Cannot cancel a booking that is still pending")
+        raise HTTPException(
+            status_code=409, detail="Cannot cancel a booking that is still pending"
+        )
 
     if row["status"] == BookingStatus.SUCCESSFUL and row["road_ids"]:
         try:
@@ -420,15 +446,26 @@ async def cancel_booking(
                 },
             )
             if resp.status_code != 200:
-                logger.error("road-srv decrement failed for booking_id=%s status=%s", booking_id, resp.status_code)
+                logger.error(
+                    "road-srv decrement failed for booking_id=%s status=%s",
+                    booking_id,
+                    resp.status_code,
+                )
         except httpx.RequestError as exc:
-            logger.error("Could not reach road-srv to decrement booking_id=%s: %s", booking_id, exc)
+            logger.error(
+                "Could not reach road-srv to decrement booking_id=%s: %s",
+                booking_id,
+                exc,
+            )
 
     await _update_status(booking_id, BookingStatus.CANCELLED)
 
     ids = {row["user_id"], x_user_id}
     await asyncio.gather(
-        *[_publish_notification(user_id, booking_id, BookingStatus.CANCELLED) for user_id in ids]
+        *[
+            _publish_notification(user_id, booking_id, BookingStatus.CANCELLED)
+            for user_id in ids
+        ]
     )
 
     logger.info("Cancelled booking_id=%s user_id=%s", booking_id, x_user_id)

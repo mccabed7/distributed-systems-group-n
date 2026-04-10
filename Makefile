@@ -8,7 +8,7 @@ UI_LOG_FILE := .ui.log
 up:
 	@if [ ! -f $(UI_PID_FILE) ]; then \
 		echo "Starting ui..."; \
-		rm $(UI_LOG_FILE); \
+		rm -f $(UI_LOG_FILE); \
 		npm --prefix ui run dev > $(UI_LOG_FILE) 2>&1 & echo $$! > $(UI_PID_FILE); \
 	fi
 	$(COMPOSE) up $(ARGS)
@@ -16,7 +16,10 @@ up:
 down:
 	@if [ -f $(UI_PID_FILE) ]; then \
 		echo "Stopping ui..."; \
-		kill $$(cat $(UI_PID_FILE)) && rm $(UI_PID_FILE); \
+		PID=$$(cat $(UI_PID_FILE)); \
+		pkill -P $$PID 2>/dev/null; \
+		kill $$PID 2>/dev/null; \
+		rm $(UI_PID_FILE); \
 	fi
 	$(COMPOSE) down
 

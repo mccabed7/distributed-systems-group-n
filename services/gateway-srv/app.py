@@ -296,7 +296,9 @@ async def login(request: Request) -> Response:
         response = await http_client.post(
             f"{USER_SRV_URL}/login",
             content=body,
-            headers={"content-type": request.headers.get("content-type", "application/json")},
+            headers={
+                "Content-Type": request.headers.get("content-type", "application/json"),
+            },
         )
     except httpx.RequestError as e:
         logger.error("Failed to login: %s", e)
