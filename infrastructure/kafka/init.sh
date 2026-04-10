@@ -9,6 +9,6 @@ echo "Creating topics..."
   --topic notifications \
   --bootstrap-server $KAFKA_BOOTSTRAP_SERVER \
   --partitions 3 \
-  --replication-factor 1
+  --replication-factor 3
 
 echo "Topic initialisation complete."
