@@ -4,21 +4,21 @@ import sys
 import requests
 
 BOOKING_SRV = "http://localhost:8002"
-ROAD_SRV    = "http://localhost:8001"
-GATEWAY     = "http://localhost:8000"
+ROAD_SRV = "http://localhost:8001"
+GATEWAY = "http://localhost:8090"
 
-TEST_DATE        = "2099-01-01"
-TEST_USER        = f"test-user-{uuid.uuid4().hex[:8]}"
-TEST_ROAD_IDS    = [9001, 9002]
-TEST_COUNTRY     = "IE"
-POLL_TIMEOUT_S   = 15
-POLL_INTERVAL_S  = 1
+TEST_DATE = "2099-01-01"
+TEST_USER = f"test-user-{uuid.uuid4().hex[:8]}"
+TEST_ROAD_IDS = [9001, 9002]
+TEST_COUNTRY = "IE"
+POLL_TIMEOUT_S = 15
+POLL_INTERVAL_S = 1
 
-GREEN  = "\033[92m"
-RED    = "\033[91m"
+GREEN = "\033[92m"
+RED = "\033[91m"
 YELLOW = "\033[93m"
-BOLD   = "\033[1m"
-RESET  = "\033[0m"
+BOLD = "\033[1m"
+RESET = "\033[0m"
 
 passed = 0
 failed = 0
@@ -47,7 +47,10 @@ def assert_status(label: str, resp: requests.Response, expected: int) -> bool:
         ok(label, f"HTTP {resp.status_code}")
         return True
     else:
-        fail(label, f"expected HTTP {expected}, got {resp.status_code}: {resp.text[:120]}")
+        fail(
+            label,
+            f"expected HTTP {expected}, got {resp.status_code}: {resp.text[:120]}",
+        )
         return False
 
 
@@ -87,7 +90,7 @@ section("Health checks")
 
 for name, url in [
     ("booking-srv", f"{BOOKING_SRV}/health"),
-    ("road-srv",    f"{ROAD_SRV}/health"),
+    ("road-srv", f"{ROAD_SRV}/health"),
     ("gateway-srv", f"{GATEWAY}/health"),
 ]:
     try:
@@ -160,10 +163,10 @@ section("booking-srv: create and resolve a booking")
 
 booking_body = {
     "start_location": "Dublin",
-    "end_location":   "Cork",
-    "booking_date":   TEST_DATE,
-    "country_code":   TEST_COUNTRY,
-    "road_ids":       TEST_ROAD_IDS,
+    "end_location": "Cork",
+    "booking_date": TEST_DATE,
+    "country_code": TEST_COUNTRY,
+    "road_ids": TEST_ROAD_IDS,
 }
 
 resp = post(
@@ -185,9 +188,14 @@ if booking_id:
     if status == "SUCCESSFUL":
         ok(f"booking resolved to SUCCESSFUL (within {POLL_TIMEOUT_S}s)")
     elif status == "FAILED":
-        fail("booking resolved to SUCCESSFUL", "got FAILED — road capacity may be exhausted")
+        fail(
+            "booking resolved to SUCCESSFUL",
+            "got FAILED — road capacity may be exhausted",
+        )
     elif status == "PENDING":
-        fail("booking resolved within timeout", f"still PENDING after {POLL_TIMEOUT_S}s")
+        fail(
+            "booking resolved within timeout", f"still PENDING after {POLL_TIMEOUT_S}s"
+        )
     else:
         fail("booking resolved", f"unexpected status: {status}")
 
@@ -203,7 +211,9 @@ if resp and assert_status("GET /bookings returns 200", resp, 200):
     if isinstance(bookings, list) and any(b["id"] == booking_id for b in bookings):
         ok(f"booking appears in list ({len(bookings)} booking(s))")
     else:
-        fail("booking appears in list", f"booking_id={booking_id} not found in response")
+        fail(
+            "booking appears in list", f"booking_id={booking_id} not found in response"
+        )
 
 
 section("booking-srv: idempotency")
@@ -226,7 +236,10 @@ id2 = resp2.json().get("id") if resp2 and resp2.status_code == 202 else None
 if id1 and id2 and id1 == id2:
     ok("duplicate request with same X-Request-Id returns same booking", f"id={id1}")
 elif id1 and id2:
-    fail("duplicate request returns same booking", f"got two different ids: {id1} vs {id2}")
+    fail(
+        "duplicate request returns same booking",
+        f"got two different ids: {id1} vs {id2}",
+    )
 else:
     fail("idempotency test", "one or both requests failed (service unavailable?)")
 
@@ -257,7 +270,9 @@ if cancel_id:
         f"{BOOKING_SRV}/bookings/{cancel_id}/cancel",
         headers={"x-user-id": TEST_USER},
     )
-    if resp and assert_status("cancelling already-cancelled booking is idempotent (200)", resp, 200):
+    if resp and assert_status(
+        "cancelling already-cancelled booking is idempotent (200)", resp, 200
+    ):
         ok("repeated cancel returns CANCELLED")
 else:
     fail("cancel test setup", "could not create a booking to cancel")
@@ -308,6 +323,8 @@ if resp is not None:
 
 total = passed + failed
 print(f"\n{BOLD}{'─' * 50}{RESET}")
-print(f"{BOLD}Results: {GREEN}{passed} passed{RESET}, {RED}{failed} failed{RESET} / {total} total{BOLD}{RESET}")
+print(
+    f"{BOLD}Results: {GREEN}{passed} passed{RESET}, {RED}{failed} failed{RESET} / {total} total{BOLD}{RESET}"
+)
 
 sys.exit(0 if failed == 0 else 1)
