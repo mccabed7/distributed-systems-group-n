@@ -46,7 +46,7 @@ def decode_token(token: str, public_key_pem: str = None):
     try:
         signed_token = jwt.decode(token, public_key_pem, algorithms=["RS256"])
     except Exception as e:
-        print("Error decoding JWT: e")
+        print(f"Error decoding JWT: {e}")
         return None
 
     return signed_token

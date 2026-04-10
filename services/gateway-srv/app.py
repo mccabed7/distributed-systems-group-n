@@ -3,6 +3,7 @@ import httpx
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect, status, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 import websockets
+import jwt
 import asyncio
 from typing import Optional
 
@@ -30,28 +31,36 @@ app.add_middleware(
 
 http_client = httpx.AsyncClient()
 
+authentication_public_key_pem = None
+
 async def authenticate(token: str) -> dict | None:
     """
     Authenticate a user token by calling user-srv
     Returns the user dict if the token is valid, or None if it isn't
     """
+    global authentication_public_key_pem
+
+    if authentication_public_key_pem is None:
+        try:
+            resp = await http_client.get(f"{USER_SRV_URL}/public_key")
+        except httpx.RequestError as e:
+            # This covers network errors: user-srv is down, DNS can't resolve, etc.
+            logger.error("Failed to reach user-srv: %s", e)
+            return None
+
+        if resp.status_code != 200:
+            logger.error("Unexpected response from user-srv: status=%s", resp.status_code)
+            return None
+        
+        authentication_public_key_pem = resp.json()["public_key"]
+
     try:
-        resp = await http_client.get(f"{USER_SRV_URL}/users/{token}")
-    except httpx.RequestError as e:
-        # This covers network errors: user-srv is down, DNS can't resolve, etc.
-        logger.error("Failed to reach user-srv: %s", e)
+        signed_token = jwt.decode(token, authentication_public_key_pem, algorithms=["RS256"])
+    except Exception as e:
+        logger.error("Authentication failed for token=%s", token)
         return None
 
-    if resp.status_code == 404:
-        # user-srv says this token doesn't match any user
-        logger.info("Authentication failed for token=%s", token)
-        return None
-
-    if resp.status_code != 200:
-        logger.error("Unexpected response from user-srv: status=%s", resp.status_code)
-        return None
-
-    return resp.json()
+    return {"id": signed_token["sub"]}
 
 @app.post("/bookings")
 async def create_bookings(
@@ -61,7 +70,7 @@ async def create_bookings(
     """
     Create a booking
     1. Client sends POST /bookings with a token
-    2. Gateway authenticates user via user-srv
+    2. Gateway authenticates user's JWT
     3. If valid, forward the request body to booking-srv POST /bookings with the X-User-ID and X-Request-ID headers
     4. Return booking-srv's response
     """
@@ -104,7 +113,7 @@ async def get_bookings(request: Request) -> Response:
     """
     Retrieve a list of bookings for a user
     1. Client sends GET /bookings
-    2. Gateway authenticates via user-srv
+    2. Gateway authenticates's JWT
     3. If valid, forward the request body to booking-srv GET /bookings with X-User-Id header
     4. Return booking-srv's response
     """
@@ -137,7 +146,7 @@ async def get_booking(request: Request, booking_id: str) -> Response:
     """
     Retrieve a booking by ID
     1. Client sends GET /bookings/{booking_id}
-    2. Gateway authenticates user via user-srv
+    2. Gateway authenticates user's JWT
     3. If valid, forward the request body to booking-srv GET /bookings/{booking_id}
     4. Return booking-srv's response
     """
@@ -170,7 +179,7 @@ async def cancel_booking(request: Request, booking_id: str) -> Response:
     """
     Cancel a user's booking
     1. Client sends POST /bookings/{booking_id}/cancel
-    2. Gateway authenticates via user-srv
+    2. Gateway authenticates's JWT
     3. If valid, forward the request body to booking-srv POST /bookings/{booking_id}/cancel with X-User-Id header
     4. Return booking-srv's response
     """
@@ -210,7 +219,7 @@ async def admin_get_bookings_for_registration(request: Request, registration: st
     """
     Retrieve a list of bookings for a registration number
     1. Client sends GET /admin/bookings/{registration}
-    2. Gateway authenticates via user-srv
+    2. Gateway authenticates's JWT
     3. If valid, forward the request to admin-srv GET /bookings/{registration}
     4. Return admin-srv's response
     """
@@ -242,7 +251,7 @@ async def admin_create_registration(request: Request) -> Response:
     """
     Associate a registration number with a user
     1. Client sends POST /admin/registrations
-    2. Gateway authenticates via user-srv
+    2. Gateway authenticates's JWT
     3. If valid, forward the request to admin-srv POST /registrations
     4. Return admin-srv's response
     """
@@ -287,7 +296,7 @@ async def login(request: Request) -> Response:
         response = await http_client.post(
             f"{USER_SRV_URL}/login",
             content=body,
-            headers=request.headers.get("content-type", "application/json"),
+            headers={"content-type": request.headers.get("content-type", "application/json")},
         )
     except httpx.RequestError as e:
         logger.error("Failed to login: %s", e)
@@ -305,7 +314,7 @@ async def proxy_websocket_connections(ws: WebSocket):
     """
     Opens a WebSocket proxy between the client and notification-srv.
     1. Client opens WebSocket connection
-    2. Gateway authenticates via user-srv
+    2. Gateway authenticates's JWT
     3. If valid, open upstream WebSocket with notification-srv
     4. Maintain proxy for as long as both connections are kept alive.
     """
@@ -315,8 +324,7 @@ async def proxy_websocket_connections(ws: WebSocket):
     if token is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing auth token")
 
-    # user = await authenticate(token)
-    user = {"id": "1234"}
+    user = await authenticate(token)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.db import engine, get_db
 from app.models import User
 from app.schemas import UserCreate, UserLogin, CreateResponse, LoginResponse
-from app.crypto import hash_password, verify_password, create_access_token, get_public_key_pem, check_token_valid
+from app.crypto import hash_password, verify_password, create_access_token, get_public_key_pem, decode_token
 
 
 User.metadata.create_all(bind=engine) # intialise tables
@@ -19,39 +19,39 @@ def health():
 @app.post("/register")
 def register(data: UserCreate, db: Session = Depends(get_db)) -> CreateResponse:
     """
-    Given email and password information, create a user account.
+    Given username and password information, create a user account.
     """
-    existing = db.query(User).filter(User.email == data.email).first()
+    existing = db.query(User).filter(User.username == data.username).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="Username already registered")
 
     user = User(
-        email=data.email,
+        username=data.username,
         password_hash=hash_password(data.password)
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    return CreateResponse(id=user.id)
+    return CreateResponse(id=user.id, username=user.username)
 
 
 @app.post("/login")
 def login(data: UserLogin, db: Session = Depends(get_db)) -> LoginResponse:
     """
-    Given email and password information, generate a JWT for the user to prove authentication and stay logged in.
+    Given username and password information, generate a JWT for the user to prove authentication and stay logged in.
     """
-    user = db.query(User).filter(User.email == data.email).first()
+    user = db.query(User).filter(User.username == data.username).first()
 
     if not user:
-        print(f"Login request fail: invalid user {data.email}")
+        print(f"Login request fail: invalid user {data.username}")
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if not verify_password(data.password, user.password_hash):
-        print(f"Login request fail: invalid password for {data.email}")
+        print(f"Login request fail: invalid password for {data.username}")
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return LoginResponse(id=user.id, token=create_access_token(user.id))
+    return LoginResponse(id=user.id, username=user.username, token=create_access_token(user.id))
 
 
 @app.delete("/users/me")

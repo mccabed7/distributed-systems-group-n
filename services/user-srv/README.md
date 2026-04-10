@@ -6,11 +6,11 @@ User service providing user registration and authentication. Issues Json Web Tok
 
 ### `POST /register`
 
-Registers a new user. Accepts email and password.
+Registers a new user. Accepts username and password.
 ```sh
 curl http://localhost:8003/register \
   -H "Content-Type: application/json" \
-  -d '{"email": "test@example.com", "password": "password"}'
+  -d '{"username": "test123", "password": "password"}'
 
 {"id": "b586b350-0ea1-4044-8924-c9c55bb406cb"}
 ```
@@ -18,12 +18,12 @@ curl http://localhost:8003/register \
 
 ### `POST /login`
 
-Authenticates a user using email and password and returns a JWT.
+Authenticates a user using username and password and returns a JWT.
 This JWT should then be used with Authorization header as a Bearer token for calls to other services.
 ```sh
 curl http://localhost:8003/login \
   -H "Content-Type: application/json" \
-  -d '{"email": "test@example.com", "password": "password"}'
+  -d '{"username": "test123", "password": "password"}'
 
 {
   "id": "b586b350-0ea1-4044-8924-c9c55bb406cb",
