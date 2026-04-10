@@ -13,8 +13,6 @@ Base = declarative_base()
 def get_db():
     print(engine)
     db = SessionLocal()
-    print(db)
-    print("here")
     try:
         yield db
     finally:

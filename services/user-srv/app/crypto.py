@@ -1,57 +1,60 @@
-from jwcrypto import jwt, jwk
+import jwt
 import json
+from cryptography.hazmat.primitives import serialization
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+PRIVATE_PEM_LOCATION = "app/private.pem"
 
 
-with open("private.pem", "rb") as f:
-    private_key = jwk.JWK.from_pem(f.read())
-    private_key.kid = "key0"
+with open(PRIVATE_PEM_LOCATION, "rb") as f:
+    _private_key = serialization.load_pem_private_key(
+        f.read(),
+        password=None
+    )
 
-_jwks = jwk.JWKSet()
-_jwks["keys"].add(private_key)
-
-public_jwks = _jwks.export(private_keys=False, as_dict=True)
-
-print(_jwks, public_jwks)
-
-
-def create_access_token(user_id: str):
-    header = {"alg": "RS256", "typ": "JWT", "kid": private_key.kid}
-    payload = {
-        "sub": str(user_id),
-        "exp": int((datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)).timestamp())
-    }
-    token = jwt.JWT(header=header, claims=payload)
-    token.make_signed_token(private_key)
-    return token.serialize()
-
-
-def check_token_valid(token: str, jwks: str = None):
-    if jwks is None:
-        jwks = json.dumps(public_jwks)
-
-    jwks = jwk.JWKSet.from_json(jwks)
-
-    try:
-        signed_token = jwt.JWT(jwt=token, key=jwks)
-    except jwt.JWTMissingKey:
-        return False
-
-    print("validating token, claims:", signed_token.claims)
-    return True
-
-
-
+_public_key_pem = _private_key.public_key().public_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode()
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+
+def get_public_key_pem():
+    return _public_key_pem
+
+
+def create_access_token(user_id: str):
+    payload = {
+        "sub": str(user_id),
+        "exp": int((datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)).timestamp())
+    }
+
+    token = jwt.encode(payload, _private_key, algorithm="RS256")
+
+    return token
+
+
+def decode_token(token: str, public_key_pem: str = None):
+    if public_key_pem is None:
+        public_key_pem = get_public_key_pem()
+
+    try:
+        signed_token = jwt.decode(token, public_key_pem, algorithms=["RS256"])
+    except Exception as e:
+        print("Error decoding JWT: e")
+        return None
+
+    return signed_token
+
+
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
+
 
 def verify_password(password: str, hashed: str) -> bool:
     return pwd_context.verify(password, hashed)
