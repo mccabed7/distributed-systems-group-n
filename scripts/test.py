@@ -6,6 +6,7 @@ import requests
 BOOKING_SRV = "http://localhost:8002"
 ROAD_SRV = "http://localhost:8001"
 GATEWAY = "http://localhost:8090"
+USER_SRV = "http://localhost:8003"
 
 TEST_DATE = "2099-01-01"
 TEST_USER = f"test-user-{uuid.uuid4().hex[:8]}"
@@ -70,6 +71,14 @@ def get(url: str, **kwargs) -> requests.Response | None:
         return None
 
 
+def delete(url: str, **kwargs) -> requests.Response | None:
+    try:
+        return requests.delete(url, **kwargs)
+    except requests.ConnectionError:
+        fail(f"DELETE {url}", "connection refused")
+        return None
+
+
 def poll_booking_status(booking_id: str, user_id: str) -> str | None:
     deadline = time.time() + POLL_TIMEOUT_S
     while time.time() < deadline:
@@ -92,12 +101,107 @@ for name, url in [
     ("booking-srv", f"{BOOKING_SRV}/health"),
     ("road-srv", f"{ROAD_SRV}/health"),
     ("gateway-srv", f"{GATEWAY}/health"),
+    ("user-srv", f"{USER_SRV}/health"),
 ]:
     try:
         resp = requests.get(url, timeout=5)
         assert_status(f"{name} /health", resp, 200)
     except requests.ConnectionError:
         fail(f"{name} /health", "connection refused — is the service running?")
+
+
+section("user-srv: registration")
+
+TEST_USERNAME = f"test-user-{uuid.uuid4().hex[:8]}"
+TEST_PASSWORD = "testpassword123"
+
+resp = post(f"{USER_SRV}/register", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+user_id = None
+if resp and assert_status("POST /register returns 200", resp, 200):
+    body = resp.json()
+    user_id = body.get("id")
+    if body.get("username") == TEST_USERNAME and user_id:
+        ok("response contains id and username")
+    else:
+        fail("response contains id and username", f"got: {body}")
+
+resp = post(f"{USER_SRV}/register", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+if resp is not None:
+    assert_status("duplicate username returns 400", resp, 400)
+
+
+section("user-srv: login")
+
+user_token = None
+resp = post(f"{USER_SRV}/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+if resp and assert_status("POST /login with valid credentials returns 200", resp, 200):
+    body = resp.json()
+    user_token = body.get("token")
+    if body.get("id") and user_token:
+        ok("response contains id and token")
+    else:
+        fail("response contains id and token", f"got: {body}")
+
+resp = post(f"{USER_SRV}/login", json={"username": TEST_USERNAME, "password": "wrongpassword"})
+if resp is not None:
+    assert_status("POST /login with wrong password returns 401", resp, 401)
+
+resp = post(f"{USER_SRV}/login", json={"username": "nonexistent-user", "password": TEST_PASSWORD})
+if resp is not None:
+    assert_status("POST /login with unknown user returns 401", resp, 401)
+
+
+section("user-srv: public key and token validation")
+
+resp = get(f"{USER_SRV}/public_key")
+if resp and assert_status("GET /public_key returns 200", resp, 200):
+    key = resp.json().get("public_key", "")
+    if key.startswith("-----BEGIN PUBLIC KEY-----"):
+        ok("public key is a valid PEM")
+    else:
+        fail("public key is a valid PEM", f"got: {key[:60]}")
+
+if user_token:
+    resp = get(f"{USER_SRV}/validate", headers={"Authorization": f"Bearer {user_token}"})
+    if resp and assert_status("GET /validate with valid token returns 200", resp, 200):
+        if resp.json().get("status") == "ok":
+            ok("validate returns status=ok")
+        else:
+            fail("validate returns status=ok", f"got: {resp.json()}")
+
+resp = get(f"{USER_SRV}/validate", headers={"Authorization": "Bearer not.a.real.token"})
+if resp is not None:
+    assert_status("GET /validate with invalid token returns 401", resp, 401)
+
+resp = get(f"{USER_SRV}/validate", headers={"Authorization": "notbearer token"})
+if resp is not None:
+    assert_status("GET /validate with malformed auth header returns 401", resp, 401)
+
+
+section("user-srv: delete account")
+
+# Register a separate user so we don't lose TEST_USERNAME for any downstream tests
+DELETE_USERNAME = f"test-delete-{uuid.uuid4().hex[:8]}"
+resp = post(f"{USER_SRV}/register", json={"username": DELETE_USERNAME, "password": TEST_PASSWORD})
+delete_token = None
+if resp and resp.status_code == 200:
+    resp = post(f"{USER_SRV}/login", json={"username": DELETE_USERNAME, "password": TEST_PASSWORD})
+    if resp and resp.status_code == 200:
+        delete_token = resp.json().get("token")
+
+if delete_token:
+    resp = delete(f"{USER_SRV}/users/me", headers={"Authorization": f"Bearer {delete_token}"})
+    if resp and assert_status("DELETE /users/me returns 200", resp, 200):
+        if resp.json().get("detail") == "User deleted successfully":
+            ok("response confirms deletion")
+        else:
+            fail("response confirms deletion", f"got: {resp.json()}")
+
+    resp = post(f"{USER_SRV}/login", json={"username": DELETE_USERNAME, "password": TEST_PASSWORD})
+    if resp is not None:
+        assert_status("login after deletion returns 401", resp, 401)
+else:
+    fail("delete test setup", "could not register/login a user to delete")
 
 
 section("road-srv: capacity management")
